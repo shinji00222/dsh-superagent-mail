@@ -11,4 +11,8 @@ export default defineConfig([
   { entry: { client: 'src/client/index.tsx' }, outDir: 'lib', format: 'cjs', platform: 'browser', dts: false, clean: false, plugins: [raw],
     deps: { neverBundle: ['react', 'react/jsx-runtime', 'react-dom'] },
     outputOptions: { entryFileNames: 'client.js', banner: 'window.__ModuleLoader__.load({ id: "dsh-superagent", factory: (require) => {', footer: 'return module.exports; } });', intro: 'var module = { exports: {} }; var exports = module.exports;' } },
+  // The separate persona-routing policy bundle (packages/persona-router). It builds in place so `pnpm --dir packages/persona-router pack`
+  // ships its lib/; `clean` stays off because the root entries above own the root lib/, and this output directory is its own.
+  { entry: { index: 'packages/persona-router/src/index.ts' }, outDir: 'packages/persona-router/lib', format: 'esm', fixedExtension: false, platform: 'node',
+    target: 'es2024', dts: true, clean: false, deps: { neverBundle: [/^@deepseek-ai\//] } },
 ])

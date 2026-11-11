@@ -13,7 +13,8 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { lockSync } from 'proper-lockfile'
-import { Engine, key, reasonText, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
+import { Engine, key, reasonText, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger,
+  type WorkerCapability } from '../core/index.ts'
 import { allowedSender, settingsPolicy } from '../policy.ts'
 import { SourceRegistry } from '../sources/registry.ts'
 import { Commands } from '../infra/commands.ts'
@@ -40,8 +41,9 @@ import { Passes } from './passes.ts'
 import { Setup } from './setup.ts'
 import { feishuSettings } from '../sources/feishu.ts'
 import { health, type Health, type SourceContext, type SourceHost } from '../sources/host.ts'
-import { Sessions } from './sessions.ts'
+import { Sessions, WORK_TOOLS } from './sessions.ts'
 import { Settings } from './settings.ts'
+import { PersonaRegistry } from '../persona/registry.ts'
 import { sourceContextOf, type SourceContextDeps } from './source-context.ts'
 import type { ResourceHost } from './resources.ts'
 import { mainTools, type MainToolsHost } from './tools/main.ts'
@@ -70,6 +72,8 @@ export class Runtime extends Service implements SourceHost {
   readonly outbox: Outbox
   readonly engine: Engine
   readonly passes: Passes
+  /** The optional Persona service a routing Bundle registers on (`orchestrator.persona`); empty means native behavior. */
+  readonly persona = new PersonaRegistry()
   readonly ready: Promise<void>
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
@@ -134,8 +138,14 @@ export class Runtime extends Service implements SourceHost {
       const outbox = this.outbox = new Outbox({ store, effects, sources, commands, paused: () => this.paused() })
       const { assessor, executor } = this
       const policy = () => settingsPolicy(store.settings(), sources)
+      const persona = this.persona
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
-        outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome), emit: event => {
+        outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome),
+        // The active router is read when a Ticket is accepted, so a Bundle loaded after startup is picked up and no router
+        // means no binding.
+        get persona() { return persona.current },
+        workerCapability: () => this.workerCapability(),
+        emit: event => {
           // Notify the main Session only about domain events it did not initiate itself.
           const notice = this.quiet ? undefined : eventNotice(event, id => store.tickets.get(id))
           if (notice) sessions.notify(...notice)
@@ -189,6 +199,15 @@ export class Runtime extends Service implements SourceHost {
     const trigger = sourceTrigger(this, ticket)
     const { setup: { deployment }, sources } = this
     return ticketEnvironment({ deployment, sources, settings: this.store.settings(), ticket, ...trigger ? { trigger } : {} })
+  }
+  /**
+   * The Worker's actual capability, which a `PersonaRouter` may use: the Executor role model, the tools an Executor Session
+   * receives (`WORK_TOOLS`), the configured worker slots and the permission preset `Sessions.ensure` applies.
+   */
+  private workerCapability(): WorkerCapability {
+    const executor = this.store.settings().executor
+    return { ...executor.model ? { provider: executor.model.provider, model: executor.model.model } : {},
+      tools: WORK_TOOLS, maxWorkers: executor.maxWorkers, permissions: 'danger-full-access' }
   }
   checkSetup(): void { this.setup.check() }
   receive(trigger: Trigger): ReceiveResult { return this.passes.receive(trigger) }

@@ -6,7 +6,7 @@ import { scopeParentOf } from '@deepseek-ai/dsh-scope'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { dirname } from 'node:path'
 import { z } from 'zod'
-import { key, liveTicket, type Ticket } from '../core/index.ts'
+import { key, liveTicket, personaSection, type Ticket } from '../core/index.ts'
 import { mandateInstructions, ticketOfSession } from '../executor/dsh.ts'
 import type { HealthEntry } from '../infra/health.ts'
 import { AgentDelivery, messageId } from './delivery.ts'
@@ -56,10 +56,10 @@ declare module '@deepseek-ai/cordis' {
  * The DSH tools an Executor Session works with: files, search, the shell and its jobs, the web, skills, its todo list and
  * subagents. It gets no other tool the profile has, whenever it was registered: none that asks or shows a person something,
  * changes the profile, schedules work or starts goals outside the worker slots, the pause and a person's hold, starts or
- * messages other Sessions, or edits documents.
+ * messages other Sessions, or edits documents. Exported as the `tools` a Persona router may use for a Worker's capability.
  */
-const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill', 'web_search',
-  'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent']
+export const WORK_TOOLS: readonly string[] = ['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list',
+  'job_kill', 'web_search', 'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent']
 /** What the main Session is told when it would wait: what it waits for comes to it, and a waiting step holds back the next. */
 const NO_WAIT = 'Reports, follow_up notices, new candidates and a background job\'s end with its output arrive by themselves as messages; '
   + 'end the turn instead of waiting for them.'
@@ -240,6 +240,14 @@ export class Sessions {
     this.retryHealth.restore(agent.id, agent.session.snapshotEvents())
     if (agent.status === 'idle') this.retryHealth.clear(agent.id)
     this.updateModelHealth()
+    // A Worker Session's Persona section: the exact snapshot its Ticket bound at accept time, read on every model request so a
+    // restart or a template update keeps it, and `''` when the Ticket has none (a Ticket accepted before routing, or none
+    // registered). Never on the main Session or a subagent.
+    if (ticket) {
+      const ticketId = ticket.id
+      binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'dsh-superagent-persona', order: 650, interpolate: false,
+        text: () => personaSection(host.store.tickets.get(ticketId)?.persona) }))
+    }
     // Disable variable interpolation so literal ${{ ... }} expressions in team prompts are preserved.
     binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'dsh-superagent-policy', order: 9999, interpolate: false, text: context => {
       const version = this.promptFor(agent, context.signal !== undefined)

@@ -29,6 +29,8 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [006 Deployment](docs/006-deployment.md): manual setup, configuration, upgrades and troubleshooting
 - [007 Architecture](docs/007-architecture.md)
 - [008 Cookbook](docs/008-cookbook.md): adding a Source
+- [009 Persona routing](docs/009-persona-routing.md): binding a Persona to a Ticket before its first Assignment, and the optional routing Bundle
+- [010 Verification](docs/010-verification.md): what was executed, the acceptance matrix, and the known gaps
 
 ## Development
 

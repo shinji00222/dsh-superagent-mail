@@ -302,6 +302,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/core/ports.ts` | The ports: `Repositories`, `Policy`, `SourceScope`, `Assessor`, `Executor`, `Outbox`, and the domain events |
 | `src/core/engine.ts` | The Engine, the core's entry point, and the role interfaces `EngineForSources`, `EngineForMainSession`, `EngineForPeople`, `EngineForSettings` and `EngineForExecutor` |
 | `src/core/part.ts` | `EnginePart`, the base of the Engine's parts, and `EngineOptions` |
+| `src/core/persona.ts` | The optional Persona routing contract: `PersonaId`, `PersonaRouteInput`, `WorkerCapability`, `PersonaRouteDecision`, `PersonaRouter`, the `PersonaBinding` a Ticket persists as audit, and `personaSection` |
+| `src/persona/registry.ts` | `PersonaRegistry`, the optional `orchestrator.persona` surface a routing Bundle registers one `PersonaRouter` on; no registration means native behavior |
 | `src/core/intake.ts` | `Intake`: Triggers from Sources, to their Tickets and, unless a person's message reached one, to Eval |
 | `src/core/evals.ts` | `Evals`: the Evals of Threads and their Decisions |
 | `src/core/tickets.ts` | `Tickets`: the Ticket lifecycle, the Threads a Ticket follows, Subscriptions and Inputs |
@@ -443,9 +445,13 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/draft.spec.ts`, `tests/prompt-config.spec.ts`, `tests/markdown.spec.ts`, `tests/marks.spec.ts` | Draft states, merges and the save bar's line; the prompt configuration by section and the line diff; the Markdown subset and its links; the mark of every state the views classify |
 | `tests/locales.spec.ts`, `tests/styles.spec.ts` | The copy in both languages, the stylesheet |
 | `tests/class-docs.spec.ts` | Every class in `src` has a JSDoc block before it |
+| `tests/persona-binding.spec.ts` | The Persona binding written with the Ticket and its first Assignment: explicit and inferred acceptance, override priority, cross-Ticket isolation, concurrent starts, retry/restart/host-restart reuse, historical Tickets, and the audit fields |
+| `tests/persona-injection.spec.ts` | The `dsh-superagent-persona` scoped section: present on a Worker's assembly only, the exact stored snapshot after a template update, absent without a binding, and not bypassed by a pre-opened or directly messaged Worker Session |
+| `tests/persona-router.spec.ts` | The routing Bundle: every Persona reachable, the rule table, override priority and invalid overrides, reproducible random mode, the no-write capability rule, and `off` registering nothing |
+| `tests/e2e/persona-first-request.spec.ts` | The isolated-profile proof: it runs the real DSH 0.2.1-rc.5 plugin tree with a recording fake model and asserts that the Worker's first captured request carries the audited Persona snapshot while the main Session's never does |
 | `tests/docs.spec.ts` | Numbered documents link only to earlier ones, every local link resolves, no document has merge conflict markers, and this document's tables list every module and every test |
 
-`tests/fixtures/` holds what several tests share: `host.ts`, a simulated DeepSeek Harness host; `panel-server.ts` and `panel.tsx`, the fake management API and the panel around a page; `deployment.ts`, a resolved deployment; `git.ts`, the environment of every git the tests start, which names no repository; and `async.ts`.
+`tests/fixtures/` holds what several tests share: `host.ts`, a simulated DeepSeek Harness host; `panel-server.ts` and `panel.tsx`, the fake management API and the panel around a page; `deployment.ts`, a resolved deployment; `git.ts`, the environment of every git the tests start, which names no repository; `persona.ts`, routers and capabilities the Persona tests share; and `async.ts`.
 
 ## Persistence
 

@@ -2,6 +2,7 @@
 import { UserError } from './errors.ts'
 import { followupOwners, reached, threadKey } from './model.ts'
 import type { Thread, ThreadRef, Ticket, Trigger } from './model.ts'
+import type { PersonaRouter, WorkerCapability } from './persona.ts'
 import type { Assessor, AssessmentOutcome, DomainEvent, DomainEvents, Executor, Outbox, Policy, Repositories, SourceScope } from './ports.ts'
 
 export interface EngineOptions {
@@ -13,6 +14,13 @@ export interface EngineOptions {
   executor: Executor
   outbox: Outbox
   prepareTicket?: (ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>) => Ticket
+  /**
+   * Optional Persona routing: a routing Bundle supplies one router, which binds each accepted Ticket's Persona in the
+   * transaction that creates it. Without one the Engine behaves natively and Tickets keep no `persona`.
+   */
+  persona?: PersonaRouter
+  /** The Worker's actual capability, as a `PersonaRouter` may use it; omitted when no capability is known. */
+  workerCapability?(): WorkerCapability
   now?: () => string
   emit?: (event: DomainEvent) => void
 }

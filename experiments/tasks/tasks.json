@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "description": "Fixed task set for the Persona routing arms A-D. Every arm runs every task unchanged; the acceptance checker is arm-independent.",
+  "snapshot": "experiments/tasks/snapshot.json",
+  "tasks": [
+    {
+      "id": "research",
+      "persona": "research",
+      "prompt": "Survey the fixture repository (src/ and docs/). Write docs/findings.md with: what parseKeyValue accepts and rejects, how fetchJson handles failures today, and the three risks you consider most important for adding retries. Do not modify source or test files. Finish with orchestrator_report state=ready.",
+      "checker": "experiments/checkers/research.mjs",
+      "artifacts": ["docs/findings.md"]
+    },
+    {
+      "id": "plan",
+      "persona": "plan",
+      "prompt": "Write docs/plan.md for adding exponential-backoff retry to fetchJson. Include the sections Steps, Files, Risks and Test plan. Do not modify source or test files. Finish with orchestrator_report state=ready.",
+      "checker": "experiments/checkers/plan.mjs",
+      "artifacts": ["docs/plan.md"]
+    },
+    {
+      "id": "implement",
+      "persona": "implement",
+      "prompt": "Add exponential-backoff retry to fetchJson: at most 3 attempts, retry only HTTP 408/429/5xx and transient network errors, use the existing sleep helper, keep the public signature. Add unit tests with an injected fake fetch. Run `node --test` and make it pass. Finish with orchestrator_report state=ready.",
+      "checker": "experiments/checkers/implement.mjs",
+      "artifacts": ["src/client.mjs", "test/retry.test.mjs"]
+    },
+    {
+      "id": "test",
+      "persona": "test",
+      "prompt": "Add tests for these parseKeyValue cases: an '=' inside the value, a trailing comment, an empty value, and a duplicate key. Run `node --test`; fix only a source bug that a new test actually exposes, with the smallest change. Finish with orchestrator_report state=ready.",
+      "checker": "experiments/checkers/test.mjs",
+      "artifacts": ["test/edge-cases.test.mjs"]
+    },
+    {
+      "id": "review",
+      "persona": "review",
+      "prompt": "Review review-target.diff as a code review. Write docs/review.md with findings grouped by severity (blocking, major, minor), each with file:line and a concrete fix. Do not modify source or test files. Finish with orchestrator_report state=ready.",
+      "checker": "experiments/checkers/review.mjs",
+      "artifacts": ["docs/review.md"]
+    }
+  ]
+}

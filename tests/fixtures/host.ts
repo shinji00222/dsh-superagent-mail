@@ -37,6 +37,13 @@ type FakeAgent = {
 const notice = (id: string, text: string) => ({ id, role: 'user', content: [{ type: 'text', text }], source: { kind: 'tool-jobs', form: 'notice' } }) as unknown as UserMessage
 type HttpHandler = (req: unknown, res: unknown) => Promise<void>
 type Delivery = { sessionId: string; mode: 'queue' | 'steer'; id: string; text: string }
+/** A system-prompt section a fake Session registered, as tests render the Session's assembly. */
+export interface PromptSection {
+  name: string
+  order?: number
+  interpolate?: boolean
+  text: (context: { signal?: AbortSignal }) => string
+}
 
 /**
  * DSH's job registry as the Executor uses it, with DSH's job tools: the jobs a Session can see, their events, a wait and a
@@ -164,6 +171,8 @@ export async function startRuntime(seed?: (store: Store) => void) {
   /** Each Session's next step, which takes the messages that wait for one. */
   const steps = new Map<string, () => void>(), claims = new Map<string, () => void>()
   const tools = new Map<string, Map<string, RegisteredTool>>()
+  /** The system-prompt sections each Session registered, oldest first, removed as their disposers run. */
+  const sections = new Map<string, PromptSection[]>()
   const deliveries = vi.fn<(request: Delivery) => void>()
   let http!: HttpHandler
   const resolveDefault = async (id: string) => agents.has(id) ? { agent: agents.get(id) } : { error: { code: 'session/not-found' } }
@@ -176,7 +185,12 @@ export async function startRuntime(seed?: (store: Store) => void) {
       const register = (tool: RegisteredTool) => { sessionTools.set(tool.name, tool); return () => sessionTools.delete(tool.name) }
       agentCtx.reflect.provide('tools', { register, get: () => undefined, restrict: vi.fn(() => () => {}), guard: vi.fn(() => () => {}) })
       agentCtx.reflect.provide('skills', { register: () => () => {} })
-      agentCtx.reflect.provide('systemPrompt', { section: () => () => {} })
+      agentCtx.reflect.provide('systemPrompt', { section: (spec: PromptSection) => {
+        const registered = sections.get(sessionId) ?? []
+        registered.push(spec)
+        sections.set(sessionId, registered)
+        return () => { const current = sections.get(sessionId) ?? []; const at = current.indexOf(spec); if (at >= 0) current.splice(at, 1) }
+      } })
       const inbox = { nextTurn: [] as UserMessage[], nextStep: [] as UserMessage[],
         // A pending message taken out, as DSH's inbox does by its id.
         remove: (id: string) => [inbox.nextTurn, inbox.nextStep].some(list => {
@@ -241,22 +255,31 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const services = { agents, llm: { resolveCallConfig: vi.fn(async (value: unknown) => value) }, sessionController: controller,
     sessionPersistence: persistence, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer,
     jobs: jobs.service, subagents: subagents.service }
-  const ctx = new Context()
-  for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
+  let ctx: Context
+  let runtime: Runtime
   for (const cli of [AGENT, BOT]) writeFileSync(cli, '#!/bin/sh\n', { mode: 0o755 })
-  const seeded = new Store(join(directory, 'orchestrator.sqlite'))
   const sources = { github: { enabled: true, config: { repository: 'acme/widgets', cli: AGENT } }, feishu: { enabled: true, config: { cli: BOT } } }
-  seeded.saveSettings(SettingsSchema.parse({ ...seeded.settings(), sources }))
-  seed?.(seeded)
-  seeded.close()
-  const runtime = new Runtime(ctx, testMachine({ stateDir: directory }), vi.fn())
-  await runtime.ready
-  runtime.sources.register(feishuKind); runtime.sources.register(githubKind)
-  const settings = runtime.store.settings()
-  runtime.store.saveSettings({ ...settings, eval: { ...settings.eval, mode: 'auto' },
-    policy: { ...settings.policy, sources: { feishu: { allowed: [{ id: MEMBER, name: 'Alice' }], syncChat: CHAT }, github: { allowed: [{ id: 'alice' }] } } },
-    sources: { ...sources, feishu: { enabled: true, config: { cli: BOT, chats: [{ chatId: CHAT, listen: 'all' }], directMessages: true } } } })
-  deliveries.mockClear()
+  /**
+   * Opens a Runtime over the fixture's state directory; the first boot seeds it. A restart (`resume`) boots again over the
+   * same directory with the same fake DSH services, as tests/runtime.spec.ts restarts the Runtime.
+   */
+  async function boot(seedRecords: ((store: Store) => void) | undefined): Promise<void> {
+    const seeded = new Store(join(directory, 'orchestrator.sqlite'))
+    seeded.saveSettings(SettingsSchema.parse({ ...seeded.settings(), sources }))
+    seedRecords?.(seeded)
+    seeded.close()
+    ctx = new Context()
+    for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
+    runtime = new Runtime(ctx, testMachine({ stateDir: directory }), vi.fn())
+    await runtime.ready
+    runtime.sources.register(feishuKind); runtime.sources.register(githubKind)
+    const settings = runtime.store.settings()
+    runtime.store.saveSettings({ ...settings, eval: { ...settings.eval, mode: 'auto' },
+      policy: { ...settings.policy, sources: { feishu: { allowed: [{ id: MEMBER, name: 'Alice' }], syncChat: CHAT }, github: { allowed: [{ id: 'alice' }] } } },
+      sources: { ...sources, feishu: { enabled: true, config: { cli: BOT, chats: [{ chatId: CHAT, listen: 'all' }], directMessages: true } } } })
+    deliveries.mockClear()
+  }
+  await boot(seed)
 
   /** Parsed JSON payloads delivered to `sessionId`. */
   const relays = (sessionId: string) => deliveries.mock.calls.map(([call]) => call).filter(call => call.sessionId === sessionId)
@@ -267,10 +290,16 @@ export async function startRuntime(seed?: (store: Store) => void) {
     if (!tool) throw new Error(`Tool ${name} is not registered for ${sessionId}`)
     return await tool.execute(args, { signal: new AbortController().signal }) as Record<string, unknown>
   }
+  /** Waits for the Runtime's effects (such as a launch a decision queued) and its passes to settle. */
+  async function settle(): Promise<void> {
+    await runtime.effects.idle(); await runtime.idle(); await runtime.effects.idle()
+  }
   /** Route one decision with the main Session's orchestrator_route, answering its result; a refused one throws its reason. */
   async function route(item: Record<string, unknown>): Promise<Record<string, unknown>> {
     const { results } = await runTool(runtime.masterId, 'orchestrator_route', { decisions: [item] }) as { results: Record<string, unknown>[] }
     if (results[0]!.refused) throw new Error(String(results[0]!.refused))
+    // A test that needs the queued launch settled calls `settle()` itself: waiting here would hide a launch that a
+    // runtime-concurrency test asserts is still under way.
     return results[0]!
   }
   async function acceptedTicket(trigger: Trigger) {
@@ -288,12 +317,15 @@ export async function startRuntime(seed?: (store: Store) => void) {
     await http(req, { writeHead: (code: number) => { status = code }, end: (data: string) => { text = data } })
     return { status, body: JSON.parse(text) as Record<string, unknown> }
   }
-  async function stop() { await runtime.stop(); vi.restoreAllMocks(); rmSync(directory, { recursive: true, force: true }) }
+  async function stopHost() { await runtime.stop(); vi.restoreAllMocks(); rmSync(directory, { recursive: true, force: true }) }
   /** The Session's model takes its next step, which takes the messages steered in since its last. */
   const step = (sessionId: string) => { steps.get(sessionId)!() }
   /** A step of the worker claims what waits for it, and is cut off before the Session took it. */
   const claim = (sessionId: string) => { claims.get(sessionId)!() }
-  return { runtime, ctx, directory, agents, tools, deliveries, relays, candidates, runTool, route, acceptedTicket, api, controller, subprocess, hooks, resolveDefault, stop,
-    jobs, subagents, step, claim }
+  const host = { get runtime() { return runtime }, get ctx() { return ctx }, directory, agents, tools, sections, deliveries, relays,
+    candidates, runTool, settle, route, acceptedTicket, api, controller, subprocess, hooks, resolveDefault, stop: stopHost, jobs, subagents, step, claim,
+    /** Stops the Runtime without deleting the state directory, then opens a new one over it, as a host restart (`resume`) does. */
+    async restart(): Promise<void> { await runtime.stop(); await boot(undefined) } }
+  return host
 }
 export type Host = Awaited<ReturnType<typeof startRuntime>>

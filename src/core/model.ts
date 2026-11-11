@@ -1,4 +1,5 @@
 /** Domain model of a proactive agent: the concepts and their invariants, independent of any source, policy, or executor. */
+import type { PersonaBinding } from './persona.ts'
 import type { Reason } from './reasons.ts'
 
 /** Actor identity in the source's own vocabulary; Policy decides which actors may originate work on that Source. */
@@ -303,6 +304,12 @@ export interface Ticket {
   origin: { triggerId: string; triggerIds: string[] }
   /** What its Executor chose: its short name, directory and assignment text. */
   execution?: Execution
+  /**
+   * The Persona its Worker Session runs under, bound once in the transaction that wrote the Ticket and its first
+   * Assignment; every later launch, retry, reopen, host restart and prompt-template update reuses this snapshot. Absent on
+   * Tickets accepted before routing, and with no `PersonaRouter` registered.
+   */
+  persona?: PersonaBinding
   /** The latest failed delivery of an Input to its worker, until a delivery succeeds. */
   delivery?: { error: string; at: string }
 }

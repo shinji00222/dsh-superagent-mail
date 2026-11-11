@@ -1,0 +1,20 @@
+{
+  "name": "dsh-superagent-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Isolated-profile e2e harness plugins for dsh-superagent persona-aware routing: scripted subprocess/workspace host boundaries, a recording fake LlmAdapter and a driver that injects a Trigger through the production Source entry.",
+  "type": "module",
+  "exports": {
+    "./host": "./host.js",
+    "./subprocess": "./subprocess.js",
+    "./model": "./model.js",
+    "./driver": "./driver.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "manifestVersion": 1
+  }
+}

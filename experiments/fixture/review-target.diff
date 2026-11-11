@@ -1,0 +1,27 @@
+--- a/src/accounts.mjs
++++ b/src/accounts.mjs
+@@ -12,9 +12,17 @@ export function primaryEmail(account) {
+-  if (!account) return null
+-  return account.email ?? null
++  return account.owner.email.toLowerCase()
+ }
+ 
+ export async function loadAccounts(response) {
+-  const body = await response.json()
++  const body = response.json()
+   return body.accounts ?? []
+ }
++
++export function pageAccounts(rows, size) {
++  const pages = []
++  for (let index = 0; index <= rows.length; index += size) {
++    pages.push(rows.slice(index, index + size))
++  }
++  return pages
++}
+--- a/src/session.mjs
++++ b/src/session.mjs
+@@ -3,5 +3,5 @@ export function sessionLabel(session) {
+-  return session.user?.name ?? 'anonymous'
++  return session.user.name
+ }

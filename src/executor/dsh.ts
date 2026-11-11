@@ -4,7 +4,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { mkdir, rmdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { key, latestAssignment, latestReport, liveTicket, runningAssignment, threadKey, waitsForPerson } from '../core/index.ts'
+import { key, latestAssignment, latestReport, liveTicket, runningAssignment, threadKey, ticketOfSession, waitsForPerson,
+  workerSessionId } from '../core/index.ts'
 import type { AssessmentOutcome, Assignment, EngineForExecutor, Execution, Executor, Mandate, PolicyEffect, Ticket, TicketInput, Trigger }
   from '../core/index.ts'
 import type { Machine } from '../deployment.ts'
@@ -20,10 +21,8 @@ import type { HealthEntry } from '../infra/health.ts'
 import { cancelled, collectJob, killJobs, runningJobs, stopBackground, stopSubagents, until, untilQuiet } from './background.ts'
 
 const now = (): string => new Date().toISOString()
-/** Returns the worker session ID (`worker-<ticketId>`) for a ticket. */
-export const workerSessionId = (ticketId: string): string => `worker-${ticketId}`
-/** Returns the ticket ID for a worker session ID (`worker-<ticketId>`), or undefined for non-worker sessions. */
-export const ticketOfSession = (sessionId: string): string | undefined => sessionId.startsWith('worker-') ? sessionId.slice('worker-'.length) : undefined
+/** The Session id derivation lives in `src/core/ids.ts` so the core can record a Ticket's `workerSessionId`; re-exported here. */
+export { ticketOfSession, workerSessionId } from '../core/index.ts'
 /** Maximum runtime for a workspace prepare command. */
 const PREPARE_TIMEOUT_MS = 10 * 60_000
 /** Maximum transient retry attempts for a launch or worker turn, and the initial backoff before resuming a turn. */

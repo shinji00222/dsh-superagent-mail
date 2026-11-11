@@ -1,9 +1,11 @@
 /** Tickets: their lifecycle from an accept to their end, their Subscriptions and their Inputs. */
-import { key } from './ids.ts'
+import { key, workerSessionId } from './ids.ts'
 import { UserError } from './errors.ts'
 import { latestAssignment, latestReport, liveTicket, readUntil, runningAssignment, settled, threadKey, waitsForPerson } from './model.ts'
 import type { Assignment, ChannelRef, Evaluation, Follow, Mandate, PolicyEffect, ThreadRef, Ticket, TicketEndBy, TicketInput, TicketOutcome,
   Trigger, TriggerDisposition } from './model.ts'
+import { PERSONA_TRIGGER_CHARS, UNKNOWN_WORKER_CAPABILITY } from './persona.ts'
+import type { PersonaBinding, PersonaRouteInput } from './persona.ts'
 import type { AssessmentOutcome } from './ports.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
 import type { Replies } from './replies.ts'
@@ -48,11 +50,33 @@ export class Tickets extends EnginePart {
     }
     ticket = this.options.prepareTicket?.(ticket, outcome) ?? ticket
     const assignment = this.newAssignment(ticket)
+    // The Persona is bound now, in the same transaction, before any Session exists: every later launch, retry, reopen and
+    // prompt-template update reads this snapshot rather than deciding again.
+    const persona = this.personaOf(ticket, assignment)
+    if (persona) ticket.persona = persona
     this.repo.tickets.save(ticket)
     for (const triggerId of triggerIds) for (const ref of this.repo.triggers.get(triggerId)?.threads ?? []) this.subscribe(id, ref)
     if (outcome.acknowledgement && primary) this.replies.acknowledgeAccepted(id, primary, outcome.acknowledgement)
     this.options.executor.start(this.require(id), assignment)
     this.emit('ticket.created', { ticketId: id, decisionId, strength: mandate.strength })
+  }
+  /**
+   * The Persona binding the routing Bundle decided for a newly accepted Ticket, recorded in the same transaction as the
+   * Ticket and its first Assignment. The input is the facts the contract allows: the origin Trigger, the accepted title, the
+   * prepared assignment, the Mandate's acceptance strength and matched rules, and the Worker's actual capability.
+   * Returns undefined when no router is registered, which keeps native behavior and leaves the Ticket without a `persona`.
+   */
+  private personaOf(ticket: Ticket, assignment: Assignment): PersonaBinding | undefined {
+    const router = this.options.persona
+    if (!router) return undefined
+    const trigger = this.repo.triggers.get(ticket.origin.triggerId)
+    const input: PersonaRouteInput = { ticketId: ticket.id, triggerId: ticket.origin.triggerId,
+      triggerText: (trigger?.text ?? '').slice(0, PERSONA_TRIGGER_CHARS), title: ticket.title,
+      assignment: ticket.execution?.assignment ?? '', acceptance: ticket.mandate.strength, rules: ticket.mandate.basis.rules ?? [],
+      worker: this.options.workerCapability?.() ?? UNKNOWN_WORKER_CAPABILITY }
+    const decision = router.route(input)
+    return { ...decision, decidedAt: ticket.createdAt, firstAssignmentId: assignment.id, workerSessionId: workerSessionId(ticket.id),
+      acceptance: ticket.mandate.strength }
   }
   /**
    * Subscribes an open ticket to `thread` and records it in `ticket.follows` (`own` when opened by the ticket).
