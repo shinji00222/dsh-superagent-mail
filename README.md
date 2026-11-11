@@ -6,6 +6,34 @@
 
 dsh-superagent is a proactive coding agent for one GitHub repository, packaged as a bundle for [DeepSeek Harness](https://www.deepseek.com/en/harness/). It listens to GitHub and, optionally, Feishu. When someone allowed asks the agent for work, it opens a work item, works on it in its own agent session and directory, and answers in the original conversation, for example with a pull request. A web panel shows what needs a person.
 
+## This fork: Persona-aware task routing
+
+This repository is a fork of
+[`deepseek-ai/dsh-superagent-prototype`](https://github.com/deepseek-ai/dsh-superagent-prototype),
+starting from its `8c32a9d` commit. Upstream work is unchanged; the fork adds one feature on top.
+
+**What it adds.** Before a Ticket's first Assignment starts, the Super-agent chooses a Persona
+(research, plan, implement, test, review), persists it on the Ticket together with the exact text it
+injected and why, and never re-decides: retries, reopens, host restarts and prompt-template updates
+reuse the first binding. The Persona contributes only work strategy and output requirements; the
+Mandate, tool permissions, Ticket goal, workspace and Session history stay as they are.
+
+**Where to look.**
+
+- [docs/009 Persona routing](docs/009-persona-routing.md): the design, the optional interface, the
+  audit record, the known limitations.
+- [docs/010 Verification](docs/010-verification.md): the commands that were run, the acceptance
+  matrix, the isolated-profile evidence, and what was deliberately not executed.
+- [`packages/persona-router`](packages/persona-router/README.md): the independent routing Bundle
+  (catalog, rules, operator overrides, `off|fixed|random|rules` modes, installable tarball).
+- [`experiments`](experiments/README.md): fixed tasks, checkers, blind rubric and arm definitions.
+  The A–D benefit experiment was **not executed**; no result is claimed.
+- [CHANGELOG.md](CHANGELOG.md): version history; `v0.2.0` is this feature.
+
+**License and credit.** Upstream code is MIT-licensed (see [LICENSE](LICENSE)); this fork keeps that
+license and the upstream authorship notice. The Persona routing additions are licensed the same way.
+When reusing this work, keep the upstream link and commit above.
+
 It is also a way of working with an agent: **take as little human attention as possible, and give as much value as possible.** An agent that can act for a whole team can also waste a whole team's attention, so it acts only when asked or when a rule the team wrote allows it, and speaks only when someone must act or can use a result. [docs/000-philosophy.md](docs/000-philosophy.md) explains the principle and what it asks of the operator.
 
 ## Setup

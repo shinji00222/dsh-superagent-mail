@@ -29,7 +29,16 @@ import { DatabaseSync } from 'node:sqlite'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '../..')
-const INSTALL = 'C:/Users/lwz12/AppData/Local/Programs/DeepSeek Harness'
+/**
+ * The installed DSH (the directory that contains `resources/app.asar`), from DSH_INSTALL.
+ * The harness is Windows-specific; on another host set DSH_INSTALL to the equivalent directory.
+ */
+const INSTALL = (process.env.DSH_INSTALL ?? '').trim()
+if (!INSTALL) {
+  console.error('[e2e] BLOCKED: set DSH_INSTALL to the installed DeepSeek Harness directory '
+    + '(the one containing resources/app.asar), e.g. %LOCALAPPDATA%\\Programs\\DeepSeek Harness')
+  process.exit(1)
+}
 const EXE = join(INSTALL, 'DeepSeek Harness.exe')
 const CLI_JS = join(INSTALL, 'resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js')
 const PROFILE = 'e2e-run'

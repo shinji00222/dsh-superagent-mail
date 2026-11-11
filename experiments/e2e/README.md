@@ -28,7 +28,9 @@ machine (profile creation + `dsh plugin add` ≈ 5 s, boot ≈ 3 s, chain < 2 s)
 The trivial isolated-profile probe is `plugins/e2e-probe`:
 
 ```powershell
-$env:DSH_HOME="$PWD\.e2e-dsh-home"; $dsh='C:\Users\lwz12\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
+# DSH_INSTALL is the installed DeepSeek Harness directory (contains resources/app.asar).
+$env:DSH_INSTALL="$env:LOCALAPPDATA\Programs\DeepSeek Harness"
+$env:DSH_HOME="$PWD\.e2e-dsh-home"; $dsh="$env:DSH_INSTALL\resources\runtime\cli\bin\dsh.cmd"
 & $dsh --profile feas --from-default-profile sdk-minimal --dump-config
 & $dsh plugin --profile feas add "file:$PWD\experiments\e2e\plugins\e2e-probe"
 # profile patch: insert {id: e2e-probe, name: e2e-probe}
