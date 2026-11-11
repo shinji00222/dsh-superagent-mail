@@ -1,10 +1,8 @@
 # dsh-superagent e2e bundle layer: inserted right after @deepseek-ai/dsh-web-app and BEFORE the
-# dsh-superagent bundle, so the scripted subprocess/workspace boundaries are in place before the
+# dsh-superagent bundle, so the scripted subprocess boundary is in place before the
 # Super-agent's Setup and Session creation run. The recording fake LLM adapter and the driver are
 # mounted here too; the driver only polls services, so its earlier mount is harmless.
 - insert:
-    - id: e2e-host
-      name: dsh-superagent-e2e/host
     - id: e2e-subprocess
       name: dsh-superagent-e2e/subprocess
     - id: e2e-model

@@ -69,6 +69,7 @@ interface Evidence {
       personaVersion: string
       sectionText: string
       reasonCode: string
+      signals: Record<string, string>
       routerId: string
       workerSessionId: string
       firstAssignmentId: string
@@ -123,6 +124,11 @@ describe.skipIf(skip)('docs/009 item 1: Persona binding reaches the Worker first
 
   it('the Ticket audit carries the exact Persona snapshot before the Worker Session first calls the model', () => {
     const { persona } = evidence.ticket
+    expect(persona).toMatchObject({
+      personaId: 'implement',
+      reasonCode: 'rule',
+      signals: { rule: 'implement-request', field: 'triggerText' },
+    })
     expect(evidence.personaHeader).toBe(`[dsh-superagent persona ${persona.personaId}@${persona.personaVersion}]`)
     expect(persona.sectionText.startsWith(evidence.personaHeader)).toBe(true)
     expect(persona.workerSessionId).toBe(evidence.ticket.workerSessionId)

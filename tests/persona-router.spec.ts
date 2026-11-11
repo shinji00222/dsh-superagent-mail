@@ -116,19 +116,64 @@ describe('rules', () => {
     expect(evaluateRules(input({ title: 'design/retry.md plan' }))?.personaId).toBe('plan')
   })
 
+  it.each([
+    ['Write docs/plan.md. Include Steps, Risks and Test plan. Do not modify tests.', 'plan'],
+    ['Survey how fetchJson handles errors. Do not modify source or test files.', 'research'],
+    ['Add bounded retries to fetchJson. Add unit tests and run node --test.', 'implement'],
+    ['Fix timeout handling and add tests in tests/retry.spec.ts.', 'implement'],
+    ['Fix timeout handling with unit tests.', 'implement'],
+    ['Do not edit tests/retry.spec.ts. Fix timeout handling.', 'implement'],
+    ['Do not review the PR. Add unit tests for retry.', 'test'],
+    ['Add tests for parseKeyValue; fix any bug they expose.', 'test'],
+    ['Run unit tests for the parser.', 'test'],
+    ['Run unit tests first, then fix timeout handling.', 'implement'],
+    ['先写方案，暂时不要改测试。', 'plan'],
+    ['修复超时处理并补充测试。', 'implement'],
+    ['Fix the review modal crash.', 'implement'],
+    ['Please fix the regression test page.', 'implement'],
+    ['修复回归测试页面无法打开的问题。', 'implement'],
+    ['帮我修复代码审查弹窗。', 'implement'],
+    ['Explain the architecture of the retry flow.', 'research'],
+    ['Write a test plan for the retry feature.', 'plan'],
+    ['请先写一份测试方案。', 'plan'],
+    ['Write a code review of the retry PR.', 'review'],
+    ['Fix the failing regression tests.', 'test'],
+    ['修复回归测试用例。', 'test'],
+    ['Update tests/retry.spec.ts.', 'test'],
+    ['Run node --test.', 'test'],
+  ] as const)('routes the primary instruction in "%s" to %s', (triggerText, personaId) => {
+    expect(evaluateRules(input({ triggerText, assignment: 'tests/retry.spec.ts' }))?.personaId).toBe(personaId)
+  })
+
+  it('skips a test path mentioned in an assignment restriction', () => {
+    const assignment = 'Do not touch tests/retry.spec.ts. Update src/client.mjs. Run the regression suite.'
+    expect(evaluateRules(input({ assignment }))).toMatchObject({ rule: 'implement-request', personaId: 'implement' })
+  })
+
+  it('checks the primary instruction before using review as the read-only fallback', () => {
+    const route = input({ triggerText: 'Fix the parser. Do not review the diff.', assignment: 'review-target.diff', worker: worker(['read']) })
+    expect(evaluateRules(route)).toMatchObject({ rule: 'capability-read-only', personaId: 'research' })
+  })
+
+  it('checks the requested action before artifact names in the same title or assignment', () => {
+    expect(evaluateRules(input({ title: 'Fix the review modal in src/review.ts' }))?.personaId).toBe('implement')
+    expect(evaluateRules(input({ assignment: 'Explain src/retry.ts and its architecture' }))?.personaId).toBe('research')
+    expect(evaluateRules(input({ assignment: 'Apply the diff from retry.diff to worker.ts' }))?.personaId).toBe('implement')
+  })
+
   /** One representative input per rule row, in table order; each must be decided by its own row. */
   const cases: readonly { rule: string; persona: PersonaId; route: PersonaRouteInput }[] = [
     { rule: 'capability-read-only', persona: 'research', route: input({ triggerText: 'implement it', worker: worker(['read']) }) },
-    { rule: 'review-artifact', persona: 'review', route: input({ assignment: 'apply the diff to worker.ts' }) },
     { rule: 'review-request', persona: 'review', route: input({ triggerText: 'review the change' }) },
-    { rule: 'test-artifact', persona: 'test', route: input({ assignment: 'tests/persona-router.spec.ts' }) },
     { rule: 'test-request', persona: 'test', route: input({ triggerText: 'add tests for the parser' }) },
-    { rule: 'plan-artifact', persona: 'plan', route: input({ title: 'design doc for retries' }) },
     { rule: 'plan-request', persona: 'plan', route: input({ triggerText: 'plan the migration' }) },
     { rule: 'research-request', persona: 'research', route: input({ triggerText: 'explain how the effect queue retries' }) },
+    { rule: 'implement-request', persona: 'implement', route: input({ triggerText: 'add a bounded retry' }) },
+    { rule: 'review-artifact', persona: 'review', route: input({ assignment: 'review-target.diff' }) },
+    { rule: 'test-artifact', persona: 'test', route: input({ assignment: 'tests/persona-router.spec.ts' }) },
+    { rule: 'plan-artifact', persona: 'plan', route: input({ title: 'docs/plan.md' }) },
     { rule: 'docs-artifact', persona: 'research', route: input({ title: 'docs/009-persona-routing.md' }) },
     { rule: 'implement-artifact', persona: 'implement', route: input({ assignment: 'files: src/executor/dsh.ts' }) },
-    { rule: 'implement-request', persona: 'implement', route: input({ triggerText: 'add a bounded retry' }) },
     { rule: 'complex-inferred-work', persona: 'plan', route: input({ triggerText: 'do the thing', acceptance: 'inferred', rules: ['observeIssues', 'observePulls'] }) },
   ]
 

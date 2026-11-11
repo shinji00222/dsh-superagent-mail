@@ -78,24 +78,26 @@ their mode in `signals`).
 
 ### Rule table (`rules` mode)
 
-The table is ordered; the first match wins and records its rule id, reason text and signals in the decision audit.
-Task-type keywords come from the origin Trigger's text; artifact hints come from the accepted title and the prepared
-assignment; complexity covers text length, explicit versus inferred acceptance, and matched admission rules; and the
-Worker's real capability is checked first.
+Rules mode checks the Worker's capability, then looks for an actionable instruction in the Trigger, accepted title,
+and prepared assignment in that order. Within each field, the first matching instruction supplies the task intent.
+Restrictions such as “do not modify tests” are skipped. A standalone test command can select `test`.
+The clause's leading action and requested output take priority over artifact hints. For example, “fix the review modal”
+selects `implement` and “write a test plan” selects `plan`. These rules use wording patterns and can miss unfamiliar
+phrasing. The decision audit records the matched rule and input field. Complexity is considered after the text rules.
 
 | Order | Rule id | Persona | Match |
 | --- | --- | --- | --- |
 | 1 | `capability-read-only` | review, else research | The Worker Session has neither the `write` nor the `edit` tool, so it can never implement. |
-| 2 | `review-artifact` | review | Title/assignment names `review` or a `diff`. |
-| 3 | `review-request` | review | Trigger asks for a review, critique, feedback, audit or inspection. |
-| 4 | `test-artifact` | test | Title/assignment names `tests/`, `*.spec.*`, `*.test.*` or `spec/`. |
-| 5 | `test-request` | test | Trigger asks for tests, a reproduction, coverage or a regression check. |
-| 6 | `plan-artifact` | plan | Title/assignment names a plan, design, RFC or proposal document. |
-| 7 | `plan-request` | plan | Trigger asks for a plan, design, approach, proposal or architecture. |
-| 8 | `research-request` | research | Trigger asks to research, investigate, explain, compare or understand. |
-| 9 | `docs-artifact` | research | Title/assignment names a documentation artifact and the Trigger asks for no change. |
-| 10 | `implement-artifact` | implement | Title/assignment names `src/`, `lib/`, a package directory or a code file. |
-| 11 | `implement-request` | implement | Trigger asks to implement, add, fix, refactor, change, update, remove or rename. |
+| 2 | `review-request` | review | The clause asks for a review, critique, feedback, audit or inspection. |
+| 3 | `test-request` | test | The clause asks for test work, a test command, reproduction or coverage. |
+| 4 | `plan-request` | plan | The clause asks for a plan, design, approach, proposal or architecture. |
+| 5 | `research-request` | research | The clause asks to research, investigate, explain, compare or understand. |
+| 6 | `implement-request` | implement | The clause asks to implement, add, fix, refactor, change, update, remove or rename. |
+| 7 | `review-artifact` | review | Title or assignment names a diff file or asks to read a diff. |
+| 8 | `test-artifact` | test | Title or assignment names a test directory or a `*.spec.*` or `*.test.*` file. |
+| 9 | `plan-artifact` | plan | Title or assignment names a plan, design, RFC or proposal document. |
+| 10 | `docs-artifact` | research | Title or assignment names documentation. |
+| 11 | `implement-artifact` | implement | Title or assignment names `src/`, `lib/`, a package directory or a code file. |
 | 12 | `complex-inferred-work` | plan | Inferred (proactive) work of at least 1200 characters or with two or more admission rules. |
 | — | `default` | implement | Nothing matched; `reasonCode` is `default` and the decision records the facts it had. |
 

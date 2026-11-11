@@ -60,9 +60,7 @@ const runDir = join(here, 'runs', stamp)
 const DSH_HOME = join(runDir, 'dsh-home')
 const captureDir = join(runDir, 'captures')
 const stateDirFs = join(runDir, 'state')
-// The plugin's Config.stateDir is validated as an absolute POSIX-style path (pattern ^/), so the
-// harness passes the current drive's root form; on Windows Node maps /Users/... to C:\Users\...
-const stateDir = stateDirFs.replace(/^([A-Za-z]):/, '').replaceAll('\\', '/')
+const stateDir = stateDirFs
 const fakeGhCli = join(FAKE_BIN, 'gh')
 const env = {
   ...process.env,
@@ -150,8 +148,7 @@ function writeProfilePatch() {
     `    stateDir: ${q(stateDir)}`,
     '- id: dsh-superagent-persona-router',
     '  config:',
-    '    mode: fixed',
-    "    persona: test",
+    '    mode: rules',
     '- id: e2e-subprocess',
     '  config:',
     `    stateDir: ${q(stateDir)}`,
@@ -168,7 +165,7 @@ function writeProfilePatch() {
     `    profile: ${q(PROFILE)}`,
     `    runId: ${q(stamp)}`,
     `    triggerId: ${q(`e2e-trigger-${stamp}`)}`,
-    '    triggerText: "Please add a regression test for the persona binding and report what changed."',
+    '    triggerText: "Fix the review modal crash. Run the regression tests afterward."',
     `    timeoutMs: ${timeoutMs - 15_000}`,
     '',
   ].join('\n')

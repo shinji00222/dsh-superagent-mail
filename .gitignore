@@ -15,3 +15,5 @@ _refs/
 compat/packs/
 compat/rc5/
 compat/.npm-cache/
+# generated fake campaign evidence (kept locally, not source)
+experiments/runs/

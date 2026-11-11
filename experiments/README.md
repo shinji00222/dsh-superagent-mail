@@ -48,12 +48,10 @@ returns deterministic usage numbers, so its tokens are pipeline placeholders, no
 
 ## Execution status
 
-**Not executed in this delivery.** By explicit instruction, the A–D benefit experiment was not run
-(no real-model tokens were spent). What is delivered is the fixed material and the exact way to run
-it: the task set, acceptance checkers, pinned snapshot, blind rubric, arm definitions, and the
-isolated-profile harness in `experiments/e2e` that already runs the real DSH plugin tree with a
-recording fake model. No aggregate result is claimed, and the tables here are a protocol, not a
-result.
+**Real-model benefit experiment: not executed.** No real-model tokens were spent and no quality
+claim is made. A portable fake-model mechanism campaign is now available; it runs the fixed fixture
+and checkers for all four arms, records the router decision and placeholder usage, and creates a
+blind artifact bundle. Its outputs are mechanism evidence only, not model-effect measurements.
 
 ## Running
 
@@ -68,11 +66,17 @@ $env:PNPM_HOME="$PWD\.pnpm-home"; $env:npm_config_cache="$PWD\.npm-cache"
 # C: random —  - id: dsh-superagent-persona-router   config: { mode: random, seed: 20261111 }
 # D: rules —   - id: dsh-superagent-persona-router   config: { mode: rules, overridesPath: <abs path> }
 
-# one run of one task (fake model: mechanism only; real model: benefit)
-node experiments/e2e/run.mjs --task experiments/tasks/<task-id> --out experiments/runs/<arm>/<task-id>
+# Windows PowerShell, all 4 arms x 5 tasks
+$runDir = "experiments/runs/fake-campaign-windows-$(Get-Date -Format yyyyMMdd-HHmmss)"
+node experiments/fake-campaign.mjs --out $runDir --seed 20261111
+node experiments/aggregate.mjs --summary --campaign $runDir
+node experiments/aggregate.mjs --anonymize --campaign $runDir
 
-# acceptance for that run's workspace
-node experiments/checkers/<checker>.mjs <run workspace>
+# acceptance for one generated workspace
+node experiments/checkers/<checker>.mjs experiments/runs/<campaign>/<arm>/<task>/workspace
+
+# optional human/LLM scoring after filling the blind CSV
+node experiments/aggregate.mjs --scores --campaign experiments/runs/<campaign>
 ```
 
 The harness records the model requests, the Ticket audit (Persona id/version/snapshot/reason) and
@@ -97,3 +101,22 @@ is it reviewable), not "did the Persona text read well".
 Top-level Ticket Workers only. No template-management UI, no multi-role orchestration, no
 push/release integration. Arms A–D are configs of the same Bundle, except A, which loads no
 Bundle at all (the native default that must keep working).
+
+
+## Runner compatibility notes
+
+`experiments/fake-campaign.mjs` runs on Windows and WSL/Linux. It uses the same fixed tasks,
+fixture snapshot, permissions and checkers for A/B/C/D, calls the real router implementation for
+B/C/D, and records each config, decision, checker result and deterministic placeholder usage. Arm C
+re-routes each Ticket with the same seed and records the equality check. It does not boot DSH and its
+tokens, duration and artifacts are not model measurements.
+
+`experiments/e2e/run.mjs` remains the isolated-profile DSH proof for the first-request mechanism and
+is currently Windows-specific. It requires `DSH_INSTALL`, runs a single task with `mode: rules`,
+and supports only `--keep` and `--timeout`. It does not implement the older
+`--task` / `--out` command shown in previous documentation. The A/B/C/D campaign should use
+`fake-campaign.mjs` until a portable real DSH profile runner is designed.
+
+`experiments/aggregate.mjs` writes `summary.json`, `summary.csv`, `blind/<shuffle-id>/` and a
+separate `blind/key.json`. Generated campaign directories are ignored by Git but remain available
+locally for inspection.

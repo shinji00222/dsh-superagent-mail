@@ -25,8 +25,8 @@ import type { PersonaId, PersonaReasonCode, PersonaRouteDecision, PersonaRouteIn
 /** The id every decision records as `routerId`. */
 export const ROUTER_ID = 'dsh-superagent-persona-router'
 
-/** The router contract version; it changes only when the accepted config or the decision shape changes. */
-export const ROUTER_VERSION = '1'
+/** The audit version of the routing policy and decision contract. */
+export const ROUTER_VERSION = '3'
 
 /** The mode an installed Bundle runs with when the profile configures nothing. */
 export const DEFAULT_MODE: PersonaRouteMode = 'rules'

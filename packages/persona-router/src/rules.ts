@@ -6,9 +6,8 @@
  * design document), the complexity (text length, explicit versus inferred acceptance, how many admission rules
  * matched) and the Worker's real capability (a Worker without `write`/`edit` can never implement).
  *
- * The table is ordered and the first match wins, so the same input always produces the same Persona, the same
- * reason text and the same recorded signals. When nothing matches, `evaluateRules` returns `undefined` and the
- * router applies its default Persona.
+ * Rules are evaluated against one actionable clause at a time. The first match wins, with the Trigger
+ * considered before the title and assignment. Capability is checked before applying the selected intent.
  */
 import type { PersonaId, PersonaRouteInput, PersonaSignals, WorkerCapability } from './types.ts'
 
@@ -20,7 +19,7 @@ export function hasWriteCapability(worker: WorkerCapability): boolean {
   return worker.tools.some(tool => WRITE_TOOLS.includes(tool))
 }
 
-/** One keyword with its precompiled start-boundary pattern; plurals and inflections still match the stem. */
+/** A leading action. English actions end on a word boundary, Chinese actions can abut their object. */
 interface Keyword {
   readonly word: string
   readonly pattern: RegExp
@@ -28,25 +27,40 @@ interface Keyword {
 
 const escape = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const keywords = (words: readonly string[]): readonly Keyword[] => words.map(word =>
-  ({ word, pattern: new RegExp(`(^|[^a-z0-9])${escape(word)}`, 'i') }))
+  ({ word, pattern: new RegExp('^' + escape(word) + (/^[a-z]/i.test(word) ? '(?=$|[\\s:?!,])' : ''), 'i') }))
 const firstKeyword = (text: string, list: readonly Keyword[]): string | undefined =>
   list.find(entry => entry.pattern.test(text))?.word
 
-/** The request-wording keywords of each task type; Chinese words work through the same non-alphanumeric boundary. */
+function requestText(text: string): string {
+  return text.replace(/^(?:(?:please|can you|could you|we need to|first|then)[,\s]+|(?:请|先|帮我|麻烦)\s*)+/i, '')
+}
+
 const REVIEW_WORDS = keywords(['review', 'code review', 'critique', 'feedback', 'audit', 'inspect', 'assess', '评审', '审查', '复核'])
-const TEST_WORDS = keywords(['test', 'testing', 'failing test', 'flaky', 'coverage', 'reproduce', 'regression', '测试', '复现'])
+const REVIEW_OUTPUT = /^(?:write|prepare|provide)\s+(?:(?:a|the)\s+)?(?:code review|review report|feedback)(?=\s+(?:of|on|for)\b|[.,:!?]|$)/i
+const TEST_ACTION = /^(?:test|reproduce|reproduction|coverage|flaky tests?|regression check)\b(?!\s+plans?\b)|^(?:测试|复现)/i
+const ENGLISH_TEST_TARGET = /^(?:add|write|create|fix|update|improve|run|include|edit|tidy)\s+(?:(?:a|an|the|some|failing|flaky|unit|integration|regression|e2e)\s+)*(?:tests?|coverage)(?=\s+(?:for|of|in|on|with|that|to|and)\b|[.,:!?]|$)/i
+const CHINESE_TEST_TARGET = /^(?:添加|增加|补充|编写|修复|运行|更新|修改)\s*(?:单元|回归|集成)?测试(?:用例)?(?=$|[，。！？；,\s]|的(?:失败|断言)|覆盖|验证)/
+const TEST_FILE_TARGET = /^(?:add|write|create|fix|update|edit|tidy|modify)\s+[\x60"']?(?:(?:tests?|__tests__|specs?)[\/\\]|[^\s\x60"']+\.(?:spec|test)\.[a-z0-9]+\b)/i
+const TEST_COMMAND = /^run\s+[\x60"']?(?:(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?test\b|node\s+--test\b|pytest\b|go\s+test\b)/i
+
+function testRequest(text: string): string | undefined {
+  const request = requestText(text)
+  return TEST_ACTION.exec(request)?.[0] ?? ENGLISH_TEST_TARGET.exec(request)?.[0]
+    ?? CHINESE_TEST_TARGET.exec(request)?.[0] ?? TEST_FILE_TARGET.exec(request)?.[0]
+    ?? TEST_COMMAND.exec(request)?.[0]
+}
 const PLAN_WORDS = keywords(['plan', 'design', 'approach', 'proposal', 'rfc', 'architecture', 'break down', 'roadmap', 'strategy', '计划', '设计', '方案'])
+const PLAN_OUTPUT = /^(?:write|draft|prepare|propose|create|produce|outline)\s+[\x60"']?(?:(?:[^\s\x60"']*[\/\\])?(?:plan|test-plan|design|proposal|rfc|roadmap)\.md\b|(?:(?:a|an|the|test|migration|implementation|design|technical|rollout|project)\s+)*(?:plan|proposal|roadmap|rfc|design doc)\b)|^(?:写|起草|制定|拟定|整理|给出)\s*(?:一份|一个|个)?\s*(?:测试|迁移|实现|技术|改造)?(?:计划|方案|路线图|设计文档)/i
 const RESEARCH_WORDS = keywords(['research', 'investigate', 'explain', 'understand', 'analyze', 'analyse', 'compare', 'survey',
   'look into', 'find out', 'where is', 'what is', 'why', 'how', '调研', '调查', '分析', '解释', '为什么', '如何'])
 const IMPLEMENT_WORDS = keywords(['implement', 'add', 'create', 'build', 'fix', 'patch', 'refactor', 'change', 'update',
-  'remove', 'delete', 'rename', 'migrate', 'upgrade', 'wire', 'integrate', 'write', 'edit', 'document', 'clean', 'tidy',
+  'remove', 'delete', 'rename', 'migrate', 'upgrade', 'wire', 'integrate', 'write', 'edit', 'document', 'clean', 'tidy', 'apply', 'modify', 'improve',
   '实现', '添加', '创建', '修复', '修改', '重构', '更新', '删除'])
 
 /** The artifact patterns of each target; they look at the title and the prepared assignment only. */
 const ARTIFACTS = {
-  review: [/(^|[\/\\\s_.-])reviews?(?=$|[\/\\\s_.-])/i, /(^|[\/\\\s_.-])diffs?(?=$|[\/\\\s_.-])/i, /\.diff(?=$|[^\w])/i],
-  test: [/(^|[\/\\\s_.-])tests?(?=$|[\/\\\s_.-])/i, /(^|[\/\\\s_.-])__tests__(?=$|[\/\\\s_.-])/i,
-    /\.(?:spec|test)\.[a-z0-9]+/i, /(^|[\/\\\s_.-])specs?(?=$|[\/\\\s_.-])/i],
+  review: [/\.diff(?=$|[^\w])/i, /^read\s+(?:the\s+)?diff\b/i],
+  test: [/(^|[\/\\\s])(?:tests?|__tests__|specs?)[\/\\]/i, /\.(?:spec|test)\.[a-z0-9]+/i],
   plan: [/(^|[\/\\\s_.-])(?:plans?|designs?|rfcs?|proposals?)(?=$|[\/\\\s_.-])/i],
   docs: [/(^|[\/\\\s])docs?(?=$|[\/\\\s_.-])/i, /\.md(?=$|[^\w])/i, /(^|[\/\\\s])readme(?=$|[\/\\\s_.-])/i],
   source: [/(^|[\/\\\s])(?:src|lib|sources?|packages?)(?=$|[\/\\\s_.-])/i,
@@ -63,14 +77,20 @@ function firstArtifact(text: string, patterns: readonly RegExp[]): string | unde
 }
 
 /** The title and assignment, where a task's target artifact is named. */
-const artifactText = (input: PersonaRouteInput): string => `${input.title}\n${input.assignment}`
+const artifactText = (input: PersonaRouteInput): string => `${input.title}\n${input.assignment}`.trim()
 
-/** The evidence when the request points at review work: a review artifact or review wording. */
-function reviewEvidence(input: PersonaRouteInput): string | undefined {
-  const artifact = firstArtifact(artifactText(input), ARTIFACTS.review)
-  if (artifact) return `review artifact "${artifact}"`
-  const word = firstKeyword(input.triggerText, REVIEW_WORDS)
-  return word ? `review wording "${word}"` : undefined
+/** Split independent instructions while keeping file paths, version numbers and shell flags together. */
+const CLAUSE_BREAK = /[.!?](?=\s|$)|[。！？；;\r\n]+|,?\s+(?:and|then|but)\s+(?=(?:then\s+)?(?:add|write|run|test|verify|check|fix|review|do not|don['’]t|never|avoid)\b)|,\s*(?=(?:do not|don['’]t|never|avoid)\b)|\s+(?=without\b)|[，,]?\s*(?=(?:不要|不必|无需|禁止|并(?:补充|添加|运行|验证)))/i
+const RESTRICTION = /^(?:(?:then|please|请|并)[,\s]*)*(?:do not\b|don['’]t\b|never\b|avoid\b|without\b|no\s+changes?\b|不要|不必|无需|禁止)/i
+const SUPPORTING_CLAUSE = /^(?:(?:then|please|并)[,\s]*)*(?:run\b|verify\b|ensure\b|finish\b|include\b|运行|验证|验收)/i
+
+function actionableClauses(text: string): string[] {
+  const clauses = text.split(CLAUSE_BREAK).map(clause => clause.trim().replace(/^[-*]\s+/, ''))
+    .filter(clause => clause && !RESTRICTION.test(clause))
+  const goals = clauses.filter(clause => !SUPPORTING_CLAUSE.test(clause))
+  // Running tests can be the whole request. Try it after substantive goals in the same field.
+  const testChecks = clauses.filter(clause => SUPPORTING_CLAUSE.test(clause) && testRequest(clause))
+  return [...goals, ...testChecks]
 }
 
 /** What one rule decided, before the router adds the audit fields. */
@@ -95,24 +115,26 @@ export interface RuleDecision extends RuleMatch {
   readonly rule: string
 }
 
-/** The ordered rule table; the first row whose `evaluate` returns a match wins. */
-const TABLE: readonly PersonaRule[] = [
-  {
-    id: 'capability-read-only',
-    description: 'A Worker without the write and edit tools never implements: review work goes to review, everything else to research.',
-    evaluate: (input) => {
-      if (hasWriteCapability(input.worker)) return undefined
-      const signals: Record<string, string | number | boolean> = { write: false, edit: false }
-      const review = reviewEvidence(input)
-      if (review) signals.evidence = review
-      return review
-        ? { personaId: 'review', reasonText: `The Worker Session has no write or edit tool, so implementation is not possible; the ${review} points at review.`, signals }
-        : { personaId: 'research', reasonText: 'The Worker Session has no write or edit tool, so implementation is not possible; routing to the research Persona.', signals }
-    },
+const CAPABILITY_RULE: PersonaRule = {
+  id: 'capability-read-only',
+  description: 'A Worker without the write and edit tools never implements: review work goes to review, everything else to research.',
+  evaluate: (input) => {
+    if (hasWriteCapability(input.worker)) return undefined
+    const signals: Record<string, string | number | boolean> = { write: false, edit: false }
+    const intent = evaluateIntent(input)
+    if (intent?.personaId === 'review') {
+      signals.evidence = intent.signals.artifact ?? intent.signals.keyword ?? intent.rule
+      return { personaId: 'review', reasonText: 'The Worker Session has no write or edit tool and the primary request is review; routing to the review Persona.', signals }
+    }
+    return { personaId: 'research', reasonText: 'The Worker Session has no write or edit tool, so implementation is not possible; routing to the research Persona.', signals }
   },
+}
+
+/** Within a clause, the first matching rule supplies the decision and its evidence. */
+const INTENT_RULES: readonly PersonaRule[] = [
   {
     id: 'review-artifact',
-    description: 'The title or assignment names a review target (`review`, `diff`): review.',
+    description: 'The title or assignment names a diff file or asks to read a diff: review.',
     evaluate: (input) => {
       const artifact = firstArtifact(artifactText(input), ARTIFACTS.review)
       return artifact
@@ -122,11 +144,12 @@ const TABLE: readonly PersonaRule[] = [
   },
   {
     id: 'review-request',
-    description: 'The Trigger wording asks for a review, critique, feedback or audit: review.',
+    description: 'The request wording asks for a review, critique, feedback or audit: review.',
     evaluate: (input) => {
-      const word = firstKeyword(input.triggerText, REVIEW_WORDS)
+      const request = requestText(input.triggerText)
+      const word = firstKeyword(request, REVIEW_WORDS) ?? REVIEW_OUTPUT.exec(request)?.[0]
       return word
-        ? { personaId: 'review', reasonText: `The Trigger wording asks for a review ("${word}"); routing to the review Persona.`, signals: { keyword: word } }
+        ? { personaId: 'review', reasonText: `The request wording asks for a review ("${word}"); routing to the review Persona.`, signals: { keyword: word } }
         : undefined
     },
   },
@@ -142,11 +165,11 @@ const TABLE: readonly PersonaRule[] = [
   },
   {
     id: 'test-request',
-    description: 'The Trigger wording asks for tests, reproductions, coverage or a regression check: test.',
+    description: 'The clause leads with a request for tests, reproduction, coverage or a regression check: test.',
     evaluate: (input) => {
-      const word = firstKeyword(input.triggerText, TEST_WORDS)
+      const word = testRequest(input.triggerText)
       return word
-        ? { personaId: 'test', reasonText: `The Trigger wording asks for test work ("${word}"); routing to the test Persona.`, signals: { keyword: word } }
+        ? { personaId: 'test', reasonText: `The request wording asks for test work ("${word}"); routing to the test Persona.`, signals: { keyword: word } }
         : undefined
     },
   },
@@ -164,7 +187,8 @@ const TABLE: readonly PersonaRule[] = [
     id: 'plan-request',
     description: 'The Trigger wording asks for a plan, design, approach, proposal or architecture: plan.',
     evaluate: (input) => {
-      const word = firstKeyword(input.triggerText, PLAN_WORDS)
+      const request = requestText(input.triggerText)
+      const word = firstKeyword(request, PLAN_WORDS) ?? PLAN_OUTPUT.exec(request)?.[0]
       return word
         ? { personaId: 'plan', reasonText: `The Trigger wording asks for planning ("${word}"); routing to the plan Persona.`, signals: { keyword: word } }
         : undefined
@@ -174,7 +198,7 @@ const TABLE: readonly PersonaRule[] = [
     id: 'research-request',
     description: 'The Trigger wording asks to research, investigate, explain, compare or understand: research.',
     evaluate: (input) => {
-      const word = firstKeyword(input.triggerText, RESEARCH_WORDS)
+      const word = firstKeyword(requestText(input.triggerText), RESEARCH_WORDS)
       return word
         ? { personaId: 'research', reasonText: `The Trigger wording asks for research ("${word}"); routing to the research Persona.`, signals: { keyword: word } }
         : undefined
@@ -185,7 +209,7 @@ const TABLE: readonly PersonaRule[] = [
     description: 'The title or assignment names documentation and the Trigger asks for no change: research.',
     evaluate: (input) => {
       const artifact = firstArtifact(artifactText(input), ARTIFACTS.docs)
-      if (!artifact || firstKeyword(input.triggerText, IMPLEMENT_WORDS)) return undefined
+      if (!artifact) return undefined
       return { personaId: 'research', reasonText: `The title or assignment names a documentation artifact ("${artifact}") and the Trigger asks for no change; routing to the research Persona.`, signals: { artifact } }
     },
   },
@@ -203,32 +227,56 @@ const TABLE: readonly PersonaRule[] = [
     id: 'implement-request',
     description: 'The Trigger wording asks to implement, add, fix, refactor, change or remove: implement.',
     evaluate: (input) => {
-      const word = firstKeyword(input.triggerText, IMPLEMENT_WORDS)
+      const word = firstKeyword(requestText(input.triggerText), IMPLEMENT_WORDS)
       return word
         ? { personaId: 'implement', reasonText: `The Trigger wording asks for a change ("${word}"); routing to the implement Persona.`, signals: { keyword: word } }
         : undefined
     },
   },
-  {
-    id: 'complex-inferred-work',
-    description: 'Inferred (proactive) work that is long or matched several admission rules: plan.',
-    evaluate: (input) => {
-      const chars = input.triggerText.length + input.title.length + input.assignment.length
-      if (input.acceptance !== 'inferred') return undefined
-      if (chars < 1200 && input.rules.length < 2) return undefined
-      return { personaId: 'plan', reasonText: `Inferred work is large (${chars} characters, ${input.rules.length} admission rules); routing to the plan Persona.`, signals: { chars, admissionRules: input.rules.length, acceptance: input.acceptance } }
-    },
-  },
 ]
 
-/** The ordered rule table; the first row whose `evaluate` returns a match wins. */
-export const RULES: readonly PersonaRule[] = Object.freeze(TABLE)
+const COMPLEXITY_RULE: PersonaRule = {
+  id: 'complex-inferred-work',
+  description: 'Inferred (proactive) work that is long or matched several admission rules: plan.',
+  evaluate: (input) => {
+    const chars = input.triggerText.length + input.title.length + input.assignment.length
+    if (input.acceptance !== 'inferred') return undefined
+    if (chars < 1200 && input.rules.length < 2) return undefined
+    return { personaId: 'plan', reasonText: `Inferred work is large (${chars} characters, ${input.rules.length} admission rules); routing to the plan Persona.`, signals: { chars, admissionRules: input.rules.length, acceptance: input.acceptance } }
+  },
+}
 
-/** Evaluates the table in order and returns the first match with its rule id recorded, or `undefined`. */
-export function evaluateRules(input: PersonaRouteInput): RuleDecision | undefined {
-  for (const rule of RULES) {
-    const match = rule.evaluate(input)
-    if (match) return { ...match, rule: rule.id, signals: Object.freeze({ rule: rule.id, ...match.signals }) }
+// An explicit action outranks incidental artifact names in the same instruction.
+const REQUEST_RULES = INTENT_RULES.filter(rule => rule.id.endsWith('-request'))
+const ARTIFACT_RULES = INTENT_RULES.filter(rule => rule.id.endsWith('-artifact'))
+const CLAUSE_RULES = [...REQUEST_RULES, ...ARTIFACT_RULES]
+
+export const RULES: readonly PersonaRule[] = Object.freeze([CAPABILITY_RULE, ...CLAUSE_RULES, COMPLEXITY_RULE])
+
+function matchRule(rule: PersonaRule, input: PersonaRouteInput): RuleDecision | undefined {
+  const match = rule.evaluate(input)
+  if (match) return { ...match, rule: rule.id, signals: Object.freeze({ rule: rule.id, ...match.signals }) }
+  return undefined
+}
+
+function evaluateIntent(input: PersonaRouteInput): RuleDecision | undefined {
+  for (const field of ['triggerText', 'title', 'assignment'] as const) {
+    for (const clause of actionableClauses(input[field])) {
+      const scoped = {
+        ...input,
+        triggerText: clause,
+        title: field === 'title' ? clause : '',
+        assignment: field === 'assignment' ? clause : '',
+      }
+      for (const rule of CLAUSE_RULES) {
+        const decision = matchRule(rule, scoped)
+        if (decision) return { ...decision, signals: Object.freeze({ ...decision.signals, field }) }
+      }
+    }
   }
   return undefined
+}
+
+export function evaluateRules(input: PersonaRouteInput): RuleDecision | undefined {
+  return matchRule(CAPABILITY_RULE, input) ?? evaluateIntent(input) ?? matchRule(COMPLEXITY_RULE, input)
 }

@@ -47,15 +47,15 @@ fails `spawn EPERM` in this Windows sandbox.
 | DSH CLI/profile/Cordis tree/Session/Agent/agent-loop | **real** — installed 0.2.1-rc.5, `dsh --profile e2e-run` |
 | `@deepseek-ai/dsh-system-prompt` assembly and scoped section registration | **real** (the captured system prompt is the assembled one) |
 | `dsh-superagent` Runtime, Setup, Engine, Intake, Evals, Tickets, Effects, DshExecutor | **real** (built `lib/index.js`) |
-| `dsh-superagent-persona-router` Bundle | **real** (`packages/persona-router`, config `mode: fixed, persona: test`) |
+| `dsh-superagent-persona-router` Bundle | **real** (`packages/persona-router`, config `mode: rules`). The request to fix a review modal must route to `implement`. |
 | Trigger entry | `runtime.receive(trigger)` — the same entry `SourceContext.receive` uses for every Source |
 | Decision | scripted main-Session `orchestrator_route` accept tool call, executed by DSH's real tool runner → `Engine.decide` |
 | Worker launch + first request | real launch effect → real `worker-<ticketId>` Session → real DSH model request |
 | **Model** | fake `LlmAdapter` provider `e2e-fake` (`plugins/e2e-bundle/model.js`): records the REAL `GenerateOptions` to `runs/<run>/captures/request-<n>.json` + `.sha256`, then streams a scripted reply |
 | **Subprocess boundary** | scripted (`plugins/e2e-bundle/subprocess.js`) — the sandbox refuses piped child stdio; answers Setup's documented `gh`/`git` probes exactly like `tests/fixtures/host.ts` |
-| **workspaceRegistry.create boundary** | qualified (`plugins/e2e-bundle/host.js`) — Windows baseline bug, see Compatibility findings |
+| Workspace creation and tool restrictions | **real**, using the Windows path and the profile's available tools |
 
-The fake model is the only thing that is not DSH: the request bodies it records are the exact
+The recording adapter receives the exact
 messages, system prompt and tool schemas the real DSH loop assembled for that Session.
 
 ## Trigger → decision path used
@@ -71,8 +71,7 @@ driver plugin: ctx.orchestrator.receive(trigger)          (Runtime.receive → P
   → launch effect → DshExecutor.launch → worker-<ticketId> Session → first model request captured
 ```
 
-No shortcut skips Intake/Eval/Ticket/launch; the only substitution is that the model that calls the
-production tool is scripted.
+The recording adapter scripts the model that calls the production tool. Setup's subprocess probes also use a test double.
 
 ## Evidence
 
@@ -98,38 +97,25 @@ request-003 `worker-<ticketId>` (Persona header + snapshot), request-004 main Se
   injects `webServer`, `workspaceRegistry`, `permissionPresets`, `skills`, … which the lighter
   templates do not provide);
 - bundle order `base, web-app, dsh-superagent-e2e, dsh-superagent, dsh-superagent-persona-router`
-  (the e2e bundle precedes the Super-agent so its host boundaries are patched first);
+  (the e2e bundle precedes the Super-agent so the subprocess adapter is ready first);
 - `agent-default-model` → `{provider: e2e-fake, model: e2e-model}`;
-- `dsh-superagent` → `stateDir: /<drive-stripped-state-path>` (the plugin's `Config` demands a
-  POSIX-style absolute path; Node maps it to the drive);
-- `dsh-superagent-persona-router` → `{mode: fixed, persona: test}`;
+- `dsh-superagent` → `stateDir` is the run directory's drive-qualified Windows state path;
+- `dsh-superagent-persona-router` → `{mode: rules}`;
 - state seeded before boot: resolved deployment (`repository: acme/widgets`, `cli: gh`) and
   `policy.sources.e2e.allowed = [{id: e2e-user}]` so the test Source's direct message is an
   explicit request. Sessions are recreated from a fresh `DSH_HOME` every run, so a half-created
   session from an earlier attempt can never be resumed.
 
-## Compatibility findings (baseline Super-agent, Windows; not caused by the Persona change)
+## Windows startup
 
-1. `src/app/sessions.ts` restricts the main Session to
-   `['skill','bash','read','read_image','job_output','job_list','job_kill']`, but the shipped
-   profile disables `tool-bash` on win32 (and mounts `tool-pwsh`); `ctx.tools.restrict` throws
-   “unknown global tool bash” and `Runtime.initialize` never becomes ready. This e2e registers a
-   placeholder `bash` tool in `plugins/e2e-bundle/host.js`; it is never executed.
-2. `Config.stateDir` and `ExecutorConfigSchema.directory` both require a POSIX-style absolute path
-   (`/…`), so on Windows the Runtime hands DSH's `workspaceRegistry.create` a drive-less path and it
-   rejects it (“Workspace path is not fully qualified”). `host.js` prefixes the current drive at
-   that one call boundary. (Seeding `executor.directory` cannot avoid this: that schema has the same
-   leading-`/` rule.)
-3. This sandbox denies any child process with piped stdio (`spawn EPERM`), so both the Super-agent's
-   Setup probes and a real provider adapter's fetch are unavailable; hence the scripted subprocess
-   boundary and the fake `LlmAdapter`. On a normal host, the same harness can instead point
-   `dsh-llm-deepseek` at a local Messages-compatible server via its `baseURL` config.
+The product accepts native absolute Windows state and executor paths. Session creation resolves
+legacy drive-less paths before calling DSH. The main Session only restricts tools available in the
+profile. The isolated profile tests those paths without the old workspace and placeholder Bash shims.
 
 ## Limitations
 
-- The model is scripted; this proves request *assembly/snapshot*, not model behaviour.
-- The subprocess and workspace `create` boundaries are adapted; everything the assertions cover
-  (Trigger→Ticket→Persona→System Prompt→model request) runs unmodified product code.
+- The scripted model validates request assembly and snapshot injection. The real-model comparison is still pending.
+- Setup's GitHub and Git subprocess probes are scripted. The harness does not verify external service access.
 - One run covers acceptance item 1 (explicit accept, first-round injection). The other items
   (inferred accept, overrides, cross-Ticket isolation, concurrency, retry/restart, direct worker
   access, historical tickets, template updates) are covered by the core's in-process tests.
