@@ -17,3 +17,9 @@ compat/rc5/
 compat/.npm-cache/
 # generated fake campaign evidence (kept locally, not source)
 experiments/runs/
+
+# Local mail authentication and build packages
+credentials/
+*.credentials.json
+client_secret*.json
+*.tgz

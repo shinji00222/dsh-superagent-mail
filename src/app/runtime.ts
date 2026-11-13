@@ -13,6 +13,7 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { lockSync } from 'proper-lockfile'
+import { isMailSource } from '../sources/mail-message.ts'
 import { Engine, key, reasonText, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger,
   type WorkerCapability } from '../core/index.ts'
 import { allowedSender, settingsPolicy } from '../policy.ts'
@@ -140,7 +141,9 @@ export class Runtime extends Service implements SourceHost {
       const policy = () => settingsPolicy(store.settings(), sources)
       const persona = this.persona
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
-        outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome),
+        outbox, deferFirstAssignment: trigger => isMailSource(trigger.source)
+          && sources.instance(trigger.source)?.config.autoProcess !== true,
+        prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome),
         // The active router is read when a Ticket is accepted, so a Bundle loaded after startup is picked up and no router
         // means no binding.
         get persona() { return persona.current },

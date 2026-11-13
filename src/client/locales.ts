@@ -349,6 +349,9 @@ const TEXT = {
   'stage.blocked': ['待处理受阻', 'Blocked'],
   'stage.failed': ['待处理失败', 'Failed'],
   'stage.delivery': ['输入未送达', 'Input undelivered'],
+  'stage.start': ['等待开始', 'Waiting to start'],
+  startTicket: ['开始处理', 'Start work'],
+  startTicketConfirm: ['把「{title}」交给 Worker 处理？', 'Start the Worker for “{title}”?'],
   'stage.queued': ['排队中', 'Queued'],
   'stage.working': ['执行中', 'Working'],
   'stage.idle': ['等待新触发', 'Waiting for a Trigger'],
@@ -761,7 +764,7 @@ export const GLOSSARY = {
 } as const
 export const GLOSSARY_VALUES = {
   decision: ['decision.accept', 'decision.reopen', 'decision.stop', 'decision.ignore', 'decision.unavailable'], strength: ['strength.explicit', 'strength.inferred'],
-  ticket: ['stage.answer', 'stage.review', 'stage.blocked', 'stage.failed', 'stage.delivery', 'stage.queued', 'stage.working', 'stage.idle', 'ticket.ended'],
+  ticket: ['stage.start', 'stage.answer', 'stage.review', 'stage.blocked', 'stage.failed', 'stage.delivery', 'stage.queued', 'stage.working', 'stage.idle', 'ticket.ended'],
   assignment: ['assignment.pending', 'assignment.running', 'assignment.ended'], report: ['report.progress', 'report.waiting', 'report.ready', 'report.blocked', 'report.failed', 'report.dropped'],
 } as const
 

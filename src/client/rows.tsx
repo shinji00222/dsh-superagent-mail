@@ -31,6 +31,9 @@ export function TicketLine({ ticket, question, onChanged, context }: {
       <div className="dt-ticket-actions">{onChanged && <>
         {answer && <ActionLink href={answer.url} icon="message">{t('answerIn', { source: valueLabel(t, 'source',
           answer.source) })}</ActionLink>}
+        {ticket.actions.start && <ConfirmButton variant="outline" icon="running" label={t('startTicket')} title={t('startTicket')}
+          message={t('startTicketConfirm', { title: ticket.title })}
+          onConfirm={() => after(call('POST tickets/:id/start', { id: ticket.id }))} />}
         {ticket.actions.retry && <ConfirmButton variant="outline" icon="refresh" label={t('retry')} title={t('retryTitle')}
           message={t('retryConfirm', { title: ticket.title })}
           onConfirm={() => after(call('POST tickets/:id/retry', { id: ticket.id }))} />}

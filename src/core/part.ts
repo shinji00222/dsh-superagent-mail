@@ -13,6 +13,7 @@ export interface EngineOptions {
   assessor: Assessor
   executor: Executor
   outbox: Outbox
+  deferFirstAssignment?(trigger: Trigger): boolean
   prepareTicket?: (ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>) => Ticket
   /**
    * Optional Persona routing: a routing Bundle supplies one router, which binds each accepted Ticket's Persona in the

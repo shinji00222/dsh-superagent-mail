@@ -128,6 +128,9 @@ export function TicketPage({ id }: { id: string }) {
   return <>
     <PageHead title={data.title}>
       {opening?.url && <ActionLink href={opening.url}>{t('openThread', { source: valueLabel(t, 'source', opening.source) })}</ActionLink>}
+      {data.actions.start && <ConfirmButton variant="outline" icon="running" label={t('startTicket')} title={t('startTicket')}
+        message={t('startTicketConfirm', { title: data.title })}
+        onConfirm={() => after(call('POST tickets/:id/start', { id }))} />}
       {data.actions.retry && <ConfirmButton variant="outline" icon="refresh" label={t('retry')} title={t('retryTitle')}
         message={t('retryConfirm', { title: data.title })}
         onConfirm={() => after(call('POST tickets/:id/retry', { id }))} />}

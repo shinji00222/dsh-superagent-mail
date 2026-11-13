@@ -276,6 +276,8 @@ export type TicketOutcome = 'completed' | 'merged' | 'closed' | 'dropped' | 'sto
 export interface Attention { id: string; question: string; triggerId?: string }
 /** Ticket aggregate: an authorized work item with its assignments, channels, thread bindings, and inputs. */
 export interface Ticket {
+  /** A new ticket waiting for a person to start its first assignment. */
+  awaitingStart?: true
   id: string
   title: string
   decisionId: string

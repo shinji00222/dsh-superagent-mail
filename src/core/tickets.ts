@@ -49,6 +49,7 @@ export class Tickets extends EnginePart {
       if (channel && !ticket.channels.some(item => sameChannel(item, channel))) ticket.channels.push(channel)
     }
     ticket = this.options.prepareTicket?.(ticket, outcome) ?? ticket
+    if (primary && this.options.deferFirstAssignment?.(primary)) ticket.awaitingStart = true
     const assignment = this.newAssignment(ticket)
     // The Persona is bound now, in the same transaction, before any Session exists: every later launch, retry, reopen and
     // prompt-template update reads this snapshot rather than deciding again.
@@ -57,7 +58,7 @@ export class Tickets extends EnginePart {
     this.repo.tickets.save(ticket)
     for (const triggerId of triggerIds) for (const ref of this.repo.triggers.get(triggerId)?.threads ?? []) this.subscribe(id, ref)
     if (outcome.acknowledgement && primary) this.replies.acknowledgeAccepted(id, primary, outcome.acknowledgement)
-    this.options.executor.start(this.require(id), assignment)
+    if (!ticket.awaitingStart) this.options.executor.start(this.require(id), assignment)
     this.emit('ticket.created', { ticketId: id, decisionId, strength: mandate.strength })
   }
   /**
@@ -185,10 +186,20 @@ export class Tickets extends EnginePart {
     this.end(ticketId, 'human', 'stopped', this.now(), reason)
     return this.require(ticketId)
   }
-  /**
-   * Ends the stalled assignment of a retryable open ticket (`failed`, `blocked`, or failed input delivery) and starts a new one.
-   * @throws UserError when the ticket is unknown or not retryable.
-   */
+  /** Releases a held first assignment once, provided its mandate is still valid. */
+  start(ticketId: string): Ticket {
+    const ticket = this.require(ticketId)
+    if (!ticket.awaitingStart || !liveTicket(ticket)) return ticket
+    const assignment = latestAssignment(ticket)
+    if (assignment?.state !== 'pending') return ticket
+    if (!this.policy().revalidate(ticket.mandate)) throw new UserError('mandateRevoked')
+    delete ticket.awaitingStart
+    ticket.updatedAt = this.now()
+    this.repo.tickets.save(ticket)
+    this.options.executor.start(ticket, assignment)
+    return ticket
+  }
+  /** Ends the stalled assignment and starts a replacement. */
   retry(ticketId: string): Ticket {
     const ticket = this.require(ticketId)
     const latest = latestAssignment(ticket)
@@ -265,7 +276,7 @@ export class Tickets extends EnginePart {
     if (!liveTicket(ticket) || held) return
     const running = runningAssignment(ticket), latest = latestAssignment(ticket)
     if (running) this.options.executor.deliver(ticket, running)
-    else if (latest?.state === 'pending' && !waitsForPerson(ticket)) this.options.executor.start(ticket, latest)
+    else if (!ticket.awaitingStart && latest?.state === 'pending' && !waitsForPerson(ticket)) this.options.executor.start(ticket, latest)
   }
   /**
    * Resume an ended ticket under its unchanged Mandate when a person's message on one of its Threads waits for it: no Eval

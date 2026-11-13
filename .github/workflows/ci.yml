@@ -37,6 +37,8 @@ jobs:
       - name: Feature and core tests
         run: >-
           pnpm exec vitest run
+          tests/mail.spec.ts
+          tests/mail-providers.spec.ts
           tests/persona-binding.spec.ts
           tests/persona-injection.spec.ts
           tests/persona-router.spec.ts
