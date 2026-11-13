@@ -7,12 +7,11 @@ const Credentials = z.object({
   email: z.email(),
   appPassword: z.string().min(1),
 })
-type Cursor = { uidValidity: string; uid: number; connectedAt?: string }
-
-export const pollICloud: MailPoll = async (credentials, ctx, signal, active) => {
-  const { email, appPassword } = Credentials.parse(credentials)
-  const account = email.toLowerCase()
-  const startedAt = new Date(Math.floor(Date.now() / 1000) * 1000)
+export async function openICloudInbox<T>(
+  credentials: z.infer<typeof Credentials>, signal: AbortSignal,
+  read: (client: ImapFlow, mailbox: Awaited<ReturnType<ImapFlow['mailboxOpen']>>) => Promise<T>,
+): Promise<T> {
+  const { email, appPassword } = credentials
   const client = new ImapFlow({
     host: 'imap.mail.me.com', port: 993, secure: true,
     auth: { user: email, pass: appPassword },
@@ -20,12 +19,28 @@ export const pollICloud: MailPoll = async (credentials, ctx, signal, active) => 
     greetingTimeout: 15_000, socketTimeout: 30_000,
   })
   const stop = () => client.close()
+  signal.throwIfAborted()
   signal.addEventListener('abort', stop, { once: true })
   client.on('error', stop)
   try {
-    if (!active()) return
     await client.connect()
     const mailbox = await client.mailboxOpen('INBOX', { readOnly: true })
+    return await read(client, mailbox)
+  } finally {
+    signal.removeEventListener('abort', stop)
+    client.close()
+  }
+}
+
+type Cursor = { uidValidity: string; uid: number; connectedAt?: string }
+
+export const pollICloud: MailPoll = async (credentials, ctx, signal, active) => {
+  const settings = Credentials.parse(credentials)
+  const account = settings.email.toLowerCase()
+  const startedAt = new Date(Math.floor(Date.now() / 1000) * 1000)
+  if (!active()) return
+  await openICloudInbox(settings, signal, async (client, mailbox) => {
+    if (!active()) return
     const cursorKey = `mail:icloud:uid:${account}`
     const cursor = ctx.state.get<Cursor>(cursorKey)
     const uidValidity = mailbox.uidValidity.toString()
@@ -53,8 +68,5 @@ export const pollICloud: MailPoll = async (credentials, ctx, signal, active) => 
       if (trigger && active()) await ctx.receive(trigger)
     }
     if (active()) ctx.state.set(cursorKey, { ...cursor, uid: last })
-  } finally {
-    signal.removeEventListener('abort', stop)
-    client.close()
-  }
+  })
 }

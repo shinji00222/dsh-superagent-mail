@@ -6,6 +6,8 @@ import type { PluginContext, SourceContext, SourceKind, Trigger } from './host.t
 import type { MailSource } from './mail-message.ts'
 import { pollGmail } from './mail-gmail.ts'
 import { pollICloud } from './mail-icloud.ts'
+import { accounts } from './accounts.ts'
+import { registerAccounts } from './account-api.ts'
 
 export const MailConfig = z.object({
   credentialsPath: z.string().trim().refine(path => !path || isAbsolute(path)).default(''),
@@ -56,13 +58,25 @@ async function watch(ctx: SourceContext, source: MailSource, poll: MailPoll, sig
         if (result === 'stored' && thread) ctx.threads.describe(`${thread.source}:${thread.id}`, { label: String(trigger.meta.subject) })
       },
     }
-    if (!config || !path || !ctx.configured()) {
+    if (!config || !ctx.configured()) {
       ctx.report(source, { state: 'paused', detail: 'Waiting for mailbox configuration or deployment' })
     } else {
       try {
-        const credentials: unknown = JSON.parse(await readFile(path, { encoding: 'utf8', signal }))
-        if (active()) await poll(credentials, scoped, signal, active)
-        if (active()) ctx.report(source, { state: 'ready', detail: 'Inbox checked', at: new Date().toISOString() })
+        const mailboxes: unknown[] = (await accounts()).filter(record => record.provider === source).map(record => record.credentials)
+        if (path) mailboxes.push(JSON.parse(await readFile(path, { encoding: 'utf8', signal })))
+        if (!mailboxes.length) {
+          if (active()) ctx.report(source, { state: 'paused', detail: 'No mailbox connected' })
+        } else {
+          let failed = 0
+          for (const mailbox of mailboxes) {
+            if (!active()) break
+            try { await poll(mailbox, scoped, signal, active) }
+            catch { failed++ }
+          }
+          if (active()) ctx.report(source, failed
+            ? { state: 'error', detail: `${failed} of ${mailboxes.length} mailboxes could not be checked` }
+            : { state: 'ready', detail: 'Inboxes checked', at: new Date().toISOString() })
+        }
       } catch {
         // Provider errors can include Authorization headers and mailbox addresses.
         if (active()) ctx.report(source, { state: 'error', detail: 'Inbox check failed. Check credentials, connection, and cursor status.' })
@@ -73,9 +87,10 @@ async function watch(ctx: SourceContext, source: MailSource, poll: MailPoll, sig
 }
 
 export const name = 'dsh-superagent-mail'
-export const inject = ['orchestrator']
+export const inject = ['orchestrator', 'webServer']
 
 export function apply(ctx: PluginContext): void {
+  ctx.effect(() => registerAccounts(ctx.webServer), 'mail: account settings')
   for (const [id, poll] of [['gmail', pollGmail], ['icloud', pollICloud]] as const) {
     const kind = mailKind(id)
     ctx.effect(() => ctx.orchestrator.sources.register(kind), `${id}: source kind`)

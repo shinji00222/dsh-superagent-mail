@@ -1,3 +1,4 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { z } from 'zod'
 
 /** Structural subset of Superagent's documented Source contract (docs/008-cookbook.md). */
@@ -56,5 +57,10 @@ interface SourceHost {
 
 export interface PluginContext {
   orchestrator: SourceHost
+  webServer: {
+    host: string
+    port: number
+    register(route: { kind: 'prefix'; path: string; handler(req: IncomingMessage, res: ServerResponse): Promise<void> }): () => void
+  }
   effect(register: () => () => void | Promise<void>, label?: string): void
 }

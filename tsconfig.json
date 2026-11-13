@@ -16,11 +16,13 @@
     "declaration": true,
     "types": [
       "node"
-    ]
+    ],
+    "jsx": "react-jsx"
   },
   "include": [
     "src/**/*.ts",
     "tests/**/*.ts",
-    "tsdown.config.ts"
+    "tsdown.config.ts",
+    "src/**/*.tsx"
   ]
 }

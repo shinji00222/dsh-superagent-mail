@@ -1,6 +1,6 @@
 {
   "name": "dsh-superagent-mail",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Gmail and iCloud Mail sources for DSH Superagent.",
   "license": "MIT",
@@ -8,7 +8,8 @@
   "main": "./lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./client": "./lib/client.js"
   },
   "files": [
     "lib",
@@ -21,7 +22,14 @@
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
-    "manifestVersion": 1
+    "manifestVersion": 1,
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
   },
   "scripts": {
     "build": "tsdown",
@@ -42,6 +50,8 @@
   "devDependencies": {
     "@types/mailparser": "^3.9.0",
     "@types/node": "22.20.0",
+    "@types/react": "18.3.28",
+    "react": "18.3.1",
     "tsdown": "0.22.14",
     "typescript": "6.0.3",
     "vitest": "4.1.8"
