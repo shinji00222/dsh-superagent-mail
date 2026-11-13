@@ -1,18 +1,10 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
 import { defineConfig } from 'tsdown'
-// `?raw` imports a file as its text, as Vite and vitest do; tsdown refuses `.css` ids without @tsdown/css, so this loads them.
-const raw = { name: 'raw',
-  resolveId: (source: string, importer?: string) => source.endsWith('?raw') && importer ? resolve(dirname(importer), source) : undefined,
-  load: (id: string) => id.endsWith('?raw') ? { code: `export default ${JSON.stringify(readFileSync(id.slice(0, -4), 'utf8'))}`, moduleType: 'js' as const }
-    : undefined }
-export default defineConfig([
-  { entry: { index: 'src/index.ts', 'github-watch': 'src/sources/github.ts', 'feishu-watch': 'src/sources/feishu.ts', mail: 'src/sources/mail.ts' }, outDir: 'lib', format: 'esm', fixedExtension: false, platform: 'node', target: 'es2024', dts: true, clean: true, deps: { neverBundle: [/^@deepseek-ai\//, 'zod', 'proper-lockfile', 'imapflow', 'mailparser', 'google-auth-library'] } },
-  { entry: { client: 'src/client/index.tsx' }, outDir: 'lib', format: 'cjs', platform: 'browser', dts: false, clean: false, plugins: [raw],
-    deps: { neverBundle: ['react', 'react/jsx-runtime', 'react-dom'] },
-    outputOptions: { entryFileNames: 'client.js', banner: 'window.__ModuleLoader__.load({ id: "dsh-superagent", factory: (require) => {', footer: 'return module.exports; } });', intro: 'var module = { exports: {} }; var exports = module.exports;' } },
-  // The separate persona-routing policy bundle (packages/persona-router). It builds in place so `pnpm --dir packages/persona-router pack`
-  // ships its lib/; `clean` stays off because the root entries above own the root lib/, and this output directory is its own.
-  { entry: { index: 'packages/persona-router/src/index.ts' }, outDir: 'packages/persona-router/lib', format: 'esm', fixedExtension: false, platform: 'node',
-    target: 'es2024', dts: true, clean: false, deps: { neverBundle: [/^@deepseek-ai\//] } },
-])
+
+export default defineConfig({
+  entry: 'src/index.ts',
+  outDir: 'lib',
+  format: 'esm',
+  target: 'es2024',
+  fixedExtension: false,
+  deps: { neverBundle: ['zod', 'imapflow', 'mailparser', 'google-auth-library'] },
+})

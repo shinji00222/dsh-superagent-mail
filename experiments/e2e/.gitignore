@@ -1,9 +1,0 @@
-# Ephemeral e2e output: each run provisions a fresh DSH_HOME, state and captures here.
-runs/
-# Local inspection artifacts (asar dumps, profile dumps, run logs) written while developing.
-.inspect/
-# Extracted asar listings written by tools/asar.mjs while inspecting the installed DSH.
-tools/.asar-list.txt
-tools/.asar-info.txt
-# Placeholder `gh` on PATH; run.mjs recreates it when missing.
-bin/

@@ -1,25 +1,10 @@
 node_modules/
 lib/
 .artifacts/
-.env
 coverage/
-# workspace-local tool caches (sandbox writes are confined to the workspace)
-.pnpm-home/
-.pnpm-store/
-.npm-cache/
-.xdg-*/
-.e2e-dsh-home/
-# reference checkouts used for research (not part of the deliverable)
-_refs/
-# compatibility check artifacts
-compat/packs/
-compat/rc5/
-compat/.npm-cache/
-# generated fake campaign evidence (kept locally, not source)
-experiments/runs/
-
-# Local mail authentication and build packages
+.env
 credentials/
 *.credentials.json
 client_secret*.json
 *.tgz
+dist/

@@ -16,15 +16,11 @@
     "declaration": true,
     "types": [
       "node"
-    ],
-    "jsx": "react-jsx"
+    ]
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.tsx",
-    "packages/persona-router/src/**/*.ts",
     "tests/**/*.ts",
-    "tests/**/*.tsx",
     "tsdown.config.ts"
   ]
 }

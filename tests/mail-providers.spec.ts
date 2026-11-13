@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { pollGmail } from '../src/sources/mail-gmail.ts'
-import { pollICloud } from '../src/sources/mail-icloud.ts'
-import type { Trigger } from '../src/core/index.ts'
+import { pollGmail } from '../src/mail-gmail.ts'
+import { pollICloud } from '../src/mail-icloud.ts'
+import type { Trigger } from '../src/host.ts'
 
 const providers = vi.hoisted(() => ({
   gmail: vi.fn(),
