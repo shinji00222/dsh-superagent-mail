@@ -1,6 +1,6 @@
 {
   "name": "dsh-superagent-mail",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "Gmail and iCloud Mail sources for DSH Superagent.",
   "license": "MIT",

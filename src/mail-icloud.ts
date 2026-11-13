@@ -1,4 +1,5 @@
 import { ImapFlow } from 'imapflow'
+import { getCACertificates } from 'node:tls'
 import { z } from 'zod'
 import { mailTrigger, MAX_MESSAGE_BYTES } from './mail-message.ts'
 import type { MailPoll } from './index.ts'
@@ -7,6 +8,19 @@ const Credentials = z.object({
   email: z.email(),
   appPassword: z.string().min(1),
 })
+export class ICloudConnectionError extends Error {
+  constructor(readonly stage: 'certificate' | 'authentication' | 'connection' | 'inbox', cause: unknown) {
+    super('iCloud Mail ' + stage + ' failed', { cause })
+  }
+}
+
+function connectionStage(error: unknown): ICloudConnectionError['stage'] {
+  const details = error as { code?: string; authenticationFailed?: boolean; serverResponseCode?: string } | undefined
+  if (details?.authenticationFailed || details?.serverResponseCode === 'AUTHENTICATIONFAILED') return 'authentication'
+  if (/CERT|ISSUER|SELF_SIGNED|LEAF_SIGNATURE/.test(details?.code ?? '')) return 'certificate'
+  return 'connection'
+}
+
 export async function openICloudInbox<T>(
   credentials: z.infer<typeof Credentials>, signal: AbortSignal,
   read: (client: ImapFlow, mailbox: Awaited<ReturnType<ImapFlow['mailboxOpen']>>) => Promise<T>,
@@ -15,6 +29,9 @@ export async function openICloudInbox<T>(
   const client = new ImapFlow({
     host: 'imap.mail.me.com', port: 993, secure: true,
     auth: { user: email, pass: appPassword },
+    tls: process.platform === 'win32'
+      ? { ca: [...new Set([...getCACertificates('default'), ...getCACertificates('system')])] }
+      : undefined,
     logger: false, disableAutoIdle: true, connectionTimeout: 15_000,
     greetingTimeout: 15_000, socketTimeout: 30_000,
   })
@@ -23,8 +40,9 @@ export async function openICloudInbox<T>(
   signal.addEventListener('abort', stop, { once: true })
   client.on('error', stop)
   try {
-    await client.connect()
+    await client.connect().catch(error => { throw new ICloudConnectionError(connectionStage(error), error) })
     const mailbox = await client.mailboxOpen('INBOX', { readOnly: true })
+      .catch(error => { throw new ICloudConnectionError('inbox', error) })
     return await read(client, mailbox)
   } finally {
     signal.removeEventListener('abort', stop)

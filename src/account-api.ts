@@ -1,10 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { accounts, googleClient, ICloudCredentials, removeAccount, saveAccount, saveGoogleClient } from './accounts.ts'
 import { connectGmail } from './gmail-connect.ts'
-import { openICloudInbox } from './mail-icloud.ts'
+import { ICloudConnectionError, openICloudInbox } from './mail-icloud.ts'
 import type { PluginContext } from './host.ts'
 
 export const API = '/superagent-mail/api'
+const iCloudErrors = {
+  certificate: 'iCloud Mail 的证书验证失败。请检查 Windows 信任的证书或网络代理。',
+  authentication: 'Apple 拒绝了登录。请核对邮箱地址和 App 专用密码。',
+  connection: '无法连接到 iCloud Mail 收信服务器。请检查网络后重试。',
+  inbox: '已登录 iCloud Mail，但无法打开收件箱。',
+}
 async function body(req: IncomingMessage): Promise<unknown> {
   const parts: Buffer[] = []
   let size = 0
@@ -67,9 +73,10 @@ export function registerAccounts(server: PluginContext['webServer']): () => void
           return
         }
         case 'POST /icloud': {
-          failure = '无法登录 iCloud Mail。请核对邮箱地址、App 专用密码和网络。'
+          failure = '请填写有效的 iCloud 邮箱地址和 App 专用密码。'
           const credentials = ICloudCredentials.parse(await body(req))
           await openICloudInbox(credentials, lifetime.signal, async () => {})
+          failure = 'iCloud Mail 验证通过，但未能保存本地凭据。'
           lifetime.signal.throwIfAborted()
           await saveAccount({ provider: 'icloud', email: credentials.email, credentials })
           break
@@ -81,8 +88,8 @@ export function registerAccounts(server: PluginContext['webServer']): () => void
         }
       }
       send(200, {})
-    } catch {
-      send(400, { error: failure })
+    } catch (error) {
+      send(400, { error: error instanceof ICloudConnectionError ? iCloudErrors[error.stage] : failure })
     }
   } })
   return () => { lifetime.abort(); unregister() }

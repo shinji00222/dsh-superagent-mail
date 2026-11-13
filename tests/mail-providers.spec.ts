@@ -63,6 +63,7 @@ it('starts Gmail from a fresh history ID, filters promotions and retries with st
 })
 
 it('opens iCloud read-only and reads only UIDs after the first successful connection', async () => {
+  providers.imap.connect.mockResolvedValue(undefined)
   const { ctx, saved, received, signal } = mailbox()
   providers.imap.mailboxOpen.mockResolvedValueOnce({ uidNext: 9, uidValidity: 1n })
   await pollICloud(icloud, ctx, signal, active)

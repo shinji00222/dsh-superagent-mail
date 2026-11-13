@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
 
-vi.mock('../src/mail-icloud.ts', () => ({ openICloudInbox: vi.fn(async () => {}) }))
+vi.mock('../src/mail-icloud.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/mail-icloud.ts')>(),
+  openICloudInbox: vi.fn(async () => {}),
+}))
 
 it('keeps multiple accounts and never returns credentials to the account list', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-mail-'))
